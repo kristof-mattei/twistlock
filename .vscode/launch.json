@@ -7,15 +7,11 @@
         {
             "type": "lldb",
             "request": "launch",
-            "name": "Debug executable 'rust-end-to-end-application'",
+            "name": "Debug executable 'twistlock'",
             "cargo": {
-                "args": [
-                    "build",
-                    "--bin=rust-end-to-end-application",
-                    "--package=rust-end-to-end-application"
-                ],
+                "args": ["build", "--bin=twistlock", "--package=twistlock"],
                 "filter": {
-                    "name": "rust-end-to-end-application",
+                    "name": "twistlock",
                     "kind": "bin"
                 }
             },
@@ -23,22 +19,22 @@
             "cwd": "${workspaceFolder}",
             "env": {
                 "RUST_BACKTRACE": "1",
-                "RUST_LOG": "rust_end_to_end_application=trace"
+                "RUST_LOG": "twistlock=trace"
             }
         },
         {
             "type": "lldb",
             "request": "launch",
-            "name": "Debug unit tests in executable 'rust-end-to-end-application'",
+            "name": "Debug unit tests in executable 'twistlock'",
             "cargo": {
                 "args": [
                     "test",
                     "--no-run",
-                    "--bin=rust-end-to-end-application",
-                    "--package=rust-end-to-end-application"
+                    "--bin=twistlock",
+                    "--package=twistlock"
                 ],
                 "filter": {
-                    "name": "rust-end-to-end-application",
+                    "name": "twistlock",
                     "kind": "bin"
                 }
             },
@@ -46,7 +42,7 @@
             "cwd": "${workspaceFolder}",
             "env": {
                 "RUST_BACKTRACE": "1",
-                "RUST_LOG": "rust_end_to_end_application=trace"
+                "RUST_LOG": "twistlock=trace"
             }
         }
     ]

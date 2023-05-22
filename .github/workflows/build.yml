@@ -18,16 +18,11 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
-  BUILD_DOCKER_CONTAINER: true
   # Use docker.io for Docker Hub if empty
   REGISTRY: ghcr.io
-  APPLICATION_NAME: rust-end-to-end-application
+  APPLICATION_NAME: twistlock
   # github.repository as <account>/<repo>
   IMAGE_NAME: ${{ github.repository }}
-  # just a name, but storing it separately as we're nice people
-  DOCKER_IMAGE_ARTIFACT_NAME: Docker image
-  DOCKER_IMAGE_OUTPUT_LOCATION: /tmp
-  DOCKER_IMAGE_TAR_LOCATION: /tmp/docker-image.tar # notice /tmp same as DOCKER_IMAGE_OUTPUT_LOCATION
 
 concurrency:
   # each new commit to a PR runs this workflow
@@ -36,18 +31,6 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  produce-docker-container:
-    name: Should Docker container be built?
-    runs-on: ubuntu-latest
-    outputs:
-      should: ${{ fromJSON(env.BUILD_DOCKER_CONTAINER) }}
-
-    steps:
-      - name: Dummy
-        shell: bash
-        run: |
-          echo "These are not the steps you're looking for..."
-
   changes:
     name: Detect changes
     runs-on: ubuntu-latest
@@ -69,12 +52,10 @@ jobs:
     runs-on: ubuntu-latest
     needs:
       - changes
-      - produce-docker-container
     outputs:
       version: ${{ steps.version.outputs.nextversion }}
     if: |
       github.event_name == 'pull_request' &&
-      fromJSON(needs.produce-docker-container.outputs.should) == true &&
       fromJSON(needs.changes.outputs.code) == true
     steps:
       - name: Checkout
@@ -365,111 +346,6 @@ jobs:
         with:
           args: --workspace --all-targets --all-features -- --deny clippy::all --deny clippy::pedantic --deny clippy::cargo
 
-  docker-build:
-    name: Build Docker container
-    runs-on: ubuntu-latest
-    needs:
-      - calculate-version
-    # if: ... is not needed because calculate-version will not run if we disable building the docker container
-    steps:
-      - name: Checkout
-        uses: actions/checkout@8e5e7e5ab8b370d6c329ec480221332ada57f0ab # v3.5.2
-
-      - name: Set the Cargo.toml version before we copy in the data into the Docker container
-        shell: bash
-        run: |
-          ./.github/scripts/update-version.sh ${{ needs.calculate-version.outputs.version }}
-
-      - name: Set up Docker Buildx
-        id: buildx
-        uses: docker/setup-buildx-action@4b4e9c3e2d4531116a6f8ba8e71fc6e2cb6e6c8c # v2.5.0
-
-      # TODO validate no changes between github.event.pull_request.head.sha and the actual current sha (representing the hypothetical merge)
-
-      # Extract metadata (tags, labels) for Docker
-      # https://github.com/docker/metadata-action
-      - name: Extract Docker metadata
-        id: meta
-        uses: docker/metadata-action@c4ee3adeed93b1fa6a762f209fb01608c1a22f1e # v4.4.0
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          tags: |
-            type=ref,event=pr,suffix=-latest
-            type=raw,value=pr-${{ github.event.pull_request.base.sha }}-${{ github.event.pull_request.head.sha }}
-          labels: |
-            org.opencontainers.image.version=pr-${{ github.event.number }}
-            org.opencontainers.image.source=${{ github.event.pull_request.html_url }}
-
-      - name: Log into registry ${{ env.REGISTRY }}
-        uses: docker/login-action@f4ef78c080cd8ba55a85445d5b36e214a81df20a # tag=v2.1.0
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Lowercase the image name
-        shell: bash
-        run: |
-          echo "IMAGE_NAME=${IMAGE_NAME,,}" >> ${GITHUB_ENV}
-
-      - name: Build Docker image
-        uses: docker/build-push-action@3b5e8027fcad23fda98b2e3ac259d8d67585f671 # v4.0.0
-        with:
-          build-args: |
-            APPLICATION_NAME=${{ env.APPLICATION_NAME }}
-          context: .
-          # this container is THE PR's artifact, and we will re-tag it
-          # once the PR has been accepted
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache
-          cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache,mode=max
-          outputs: type=docker,dest=${{ env.DOCKER_IMAGE_TAR_LOCATION }}
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@0b7f8abb1508181956e8e162db84b466c27e18ce # v3.1.2
-        with:
-          name: ${{ env.DOCKER_IMAGE_ARTIFACT_NAME }}
-          path: ${{ env.DOCKER_IMAGE_TAR_LOCATION }}
-
-  docker-publish:
-    name: Publish Docker container
-    runs-on: ubuntu-latest
-    needs:
-      - cargo-build
-      - cargo-fmt
-      - cargo-test-and-report
-      - cargo-clippy-and-report
-      - docker-build
-    # Check if the event is not triggered by a fork
-    if: github.event.pull_request.head.repo.full_name == github.repository && github.event_name == 'pull_request'
-    steps:
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@4b4e9c3e2d4531116a6f8ba8e71fc6e2cb6e6c8c # v2.5.0
-
-      - name: Download artifact
-        uses: actions/download-artifact@9bc31d5ccc31df68ecc42ccf4149144866c47d8a # v3.0.2
-        with:
-          name: ${{ env.DOCKER_IMAGE_ARTIFACT_NAME }}
-          path: ${{ env.DOCKER_IMAGE_OUTPUT_LOCATION }}
-
-      - name: Log into registry ${{ env.REGISTRY }}
-        uses: docker/login-action@f4ef78c080cd8ba55a85445d5b36e214a81df20a # tag=v2.1.0
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Load image from artifact
-        shell: bash
-        run: |
-          docker load --input ${{ env.DOCKER_IMAGE_TAR_LOCATION }}
-
-      - name: Push image with all tags
-        shell: bash
-        run: |
-          docker push ${REGISTRY,,}/${IMAGE_NAME,,} --all-tags
-
   all-done:
     name: All done
     # this is the job that should be marked as required on GitHub. It's the only one that'll reliably trigger
@@ -484,8 +360,6 @@ jobs:
       - cargo-fmt
       - cargo-clippy-and-report
       - cargo-test-and-report
-      - docker-build
-      - docker-publish
     if: always()
     steps:
       - name: Fail!
