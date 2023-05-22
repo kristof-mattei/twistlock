@@ -7,8 +7,8 @@ rust-version = "1.69.0"
 authors = ["Kristof Mattei"]
 description = "Docker <> Rust interface"
 license-file = "LICENSE"
-categories = ["starter", "end-to-end"]
-keywords = ["docker", "release"]
+categories = ["api-bindings"]
+keywords = ["docker"]
 repository = "https://github.com/kristof-mattei/twistlock"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
