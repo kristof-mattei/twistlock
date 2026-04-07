@@ -22,7 +22,7 @@
   },
   "homepage": "https://github.com/kristof-mattei/twistlock#readme",
   "devDependencies": {
-    "@actions/tool-cache": "^2.0.1",
+    "@actions/tool-cache": "^4.0.0",
     "@semantic-release/changelog": "^6.0.3",
     "@semantic-release/commit-analyzer": "^9.0.2",
     "@semantic-release/github": "^8.0.7",
