@@ -1,4 +1,4 @@
-#[must_use] 
+#[must_use]
 pub fn add(left: usize, right: usize) -> usize {
     left + right
 }
