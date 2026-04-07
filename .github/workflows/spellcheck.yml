@@ -1,0 +1,103 @@
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
+name: Spellcheck
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+concurrency:
+  # each new commit to a PR runs this workflow
+  # so we need to avoid a long running older one from overwriting the "pr-<number>-latest"
+  group: "${{ github.workflow }} @ ${{ github.ref_name }}"
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  RUSTC_WRAPPER: "sccache"
+  SCCACHE_GHA_ENABLED: "true"
+
+jobs:
+  spellcheck:
+    name: Spellcheck
+    if: ${{ !startsWith(github.head_ref, 'release/') }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          show-progress: false
+
+      - name: Make sure dictionary words are sorted and unique
+        run: |
+          FILE="spellcheck.dic"
+
+          # Verify the first line is an integer.
+          first_line=$(head -n 1 "$FILE")
+          if ! [[ "$first_line" =~ ^[0-9]+$ ]]; then
+            echo "Error: The first line of $FILE must be an integer, but got: '$first_line'"
+            exit 1
+          fi
+          expected_count="$first_line"
+
+          # Check that the number of lines matches the integer.
+          # xargs (with no arguments) will strip leading/trailing whitespace from wc's output.
+          actual_count=$(sed '1d' "$FILE" | wc -l | xargs)
+          if [ "$expected_count" -ne "$actual_count" ]; then
+            echo "Error: The number of lines ($actual_count) does not match $expected_count."
+            exit 1
+          fi
+
+          # `sed` removes the first line (number of words).
+          #
+          # `sort` makes sure everything in between is sorted
+          # and contains no duplicates.
+          #
+          # Since `sort` is sensitive to locale, we set it
+          # using LC_ALL to en_US.UTF8 to be consistent in different
+          # environments.
+
+          (
+            sed '1d' "$FILE" | LC_ALL=en_US.UTF8 sort -uc
+          ) || {
+            echo "Dictionary is not in sorted order. Correct order is:"
+            LC_ALL=en_US.UTF8 sort -u <(sed '1d' "$FILE")
+            false
+          }
+
+      - name: Detect trailing whitespace
+        run: |
+          if grep --exclude-dir=.git --exclude-dir=node_modules --exclude-dir=target --binary-files=without-match --recursive --line-number --regexp='\s$' .
+          then
+              echo ''
+              echo 'Please remove trailing whitespace from these lines.'
+              exit 1
+          fi
+
+      - name: Set up binstall
+        uses: cargo-bins/cargo-binstall@0b24824336e2b3800b0f89d9e08b2c08bfa3dcdd # v1.17.9
+
+      - name: Install custom cargo-spellcheck
+        run: |
+          cargo binstall cargo-spellcheck@0.15.6 \
+            --no-confirm \
+            --pkg-fmt bin \
+            --pkg-url "https://github.com/kristof-mattei/cargo-spellcheck/releases/download/v{ version }/{ name }-v{ version }-{ target }"
+
+      - name: Run cargo-spellcheck
+        run: |
+          if ! cargo spellcheck --code 1
+          then
+              echo ''
+              echo ''
+              echo 'If this is a Rust method/type/variable name, then you should'
+              echo 'enclose it in backticks like this: `MyRustType`.'
+              echo ''
+              echo 'If this is a real word, then you can add it to spellcheck.dic'
+              exit 1
+          fi

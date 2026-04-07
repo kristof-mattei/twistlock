@@ -1,9 +1,12 @@
+# only in root
+/node_modules
+/reports
 /target
 
-.cr-release-packages
-.cr-index
-
-node_modules/
-reports/
+# emitted per-crate
 profiling/
-NEXTVERSION
+
+# samply output
+/profile.json
+
+.env

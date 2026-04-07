@@ -1,3 +1,6 @@
+#![expect(clippy::tests_outside_test_module, reason = "Integration tests")]
+use pretty_assertions::assert_eq;
+
 #[test]
 fn assert_world_ok() {
     let cls1 = || true;

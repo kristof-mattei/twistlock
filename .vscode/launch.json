@@ -5,45 +5,49 @@
     "version": "0.2.0",
     "configurations": [
         {
+            "name": "Debug executable 'twistlock'",
             "type": "lldb",
             "request": "launch",
-            "name": "Debug executable 'twistlock'",
             "cargo": {
-                "args": ["build", "--bin=twistlock", "--package=twistlock"],
-                "filter": {
-                    "name": "twistlock",
-                    "kind": "bin"
-                }
+                "args": ["run", "--bin=twistlock"]
             },
             "args": [],
-            "cwd": "${workspaceFolder}",
             "env": {
                 "RUST_BACKTRACE": "1",
-                "RUST_LOG": "twistlock=trace"
-            }
+                "RUST_LOG": "DEBUG,twistlock=TRACE"
+            },
+            "internalConsoleOptions": "neverOpen",
+            "terminal": "integrated"
         },
         {
+            "name": "Debug unit tests in executable 'twistlock'",
             "type": "lldb",
             "request": "launch",
-            "name": "Debug unit tests in executable 'twistlock'",
             "cargo": {
-                "args": [
-                    "test",
-                    "--no-run",
-                    "--bin=twistlock",
-                    "--package=twistlock"
-                ],
-                "filter": {
-                    "name": "twistlock",
-                    "kind": "bin"
-                }
+                "args": ["test", "--no-run", "--bin=twistlock"]
             },
             "args": [],
-            "cwd": "${workspaceFolder}",
             "env": {
                 "RUST_BACKTRACE": "1",
-                "RUST_LOG": "twistlock=trace"
-            }
+                "RUST_LOG": "DEBUG,twistlock=TRACE"
+            },
+            "internalConsoleOptions": "neverOpen",
+            "terminal": "integrated"
+        },
+        {
+            "name": "Debug integration test 'integration_tests'",
+            "type": "lldb",
+            "request": "launch",
+            "cargo": {
+                "args": ["test", "--no-run", "--test=integration_tests"]
+            },
+            "args": [],
+            "env": {
+                "RUST_BACKTRACE": "1",
+                "RUST_LOG": "DEBUG,twistlock=TRACE"
+            },
+            "internalConsoleOptions": "neverOpen",
+            "terminal": "integrated"
         }
     ]
 }

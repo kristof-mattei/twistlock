@@ -1,0 +1,116 @@
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
+name: Publish crate
+
+on:
+  release:
+    types:
+      - released
+      - prereleased
+
+concurrency:
+  group: "${{ github.workflow }}"
+  cancel-in-progress: false # last one must win in case of multiple releases
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  repo-has-crate:
+    name: Repo publishes crate?
+    runs-on: ubuntu-latest
+    outputs:
+      has_crate: ${{ steps.determine.outputs.has_crate }}
+
+    steps:
+      - name: Repo has crate?
+        id: determine
+        shell: bash
+        run: |
+          has_crate="${{ vars.HAS_CRATE }}"
+          echo "has_crate=${has_crate:-false}" >> "${GITHUB_OUTPUT}"
+
+  publish-crate:
+    name: Publish crate
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      id-token: write
+    needs:
+      - repo-has-crate
+    if: |
+      fromJSON(needs.repo-has-crate.outputs.has_crate) == true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          show-progress: false
+
+      - name: Cache cargo
+        uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
+        env:
+          CACHE_NAME: cargo
+        with:
+          path: |
+            ~/.cargo/.crates.toml
+            ~/.cargo/.crates2.json
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+          key: ${{ runner.os }}-${{ runner.arch }}-build-${{ env.CACHE_NAME }}-${{ hashFiles('Cargo.lock') }}-${{ github.workflow }}-${{ github.job }}
+          restore-keys: |
+            ${{ runner.os }}-${{ runner.arch }}-build-${{ env.CACHE_NAME }}-${{ hashFiles('Cargo.lock') }}-${{ github.workflow }}-
+            ${{ runner.os }}-${{ runner.arch }}-build-${{ env.CACHE_NAME }}-${{ hashFiles('Cargo.lock') }}-
+            ${{ runner.os }}-${{ runner.arch }}-build-${{ env.CACHE_NAME }}-
+
+      - name: Set up mold
+        uses: rui314/setup-mold@725a8794d15fc7563f59595bd9556495c0564878 # v1
+
+      - name: Set up toolchain
+        shell: bash
+        run: |
+          rm ${HOME}/.cargo/bin/cargo-fmt
+          rm ${HOME}/.cargo/bin/rust-analyzer
+          rm ${HOME}/.cargo/bin/rustfmt
+
+          rustup self update
+          rustup update
+          rustup show active-toolchain || rustup toolchain install
+          rustup show
+
+          cargo --version
+
+      - name: Install cargo-edit to do set-version
+        uses: taiki-e/install-action@94cb46f8d6e437890146ffbd78a778b78e623fb2 # v2.74.0
+        with:
+          tool: cargo-edit
+
+      - name: Set version in Cargo.toml / Cargo.lock
+        shell: bash
+        id: version
+        run: |
+          version="${{ github.ref_name }}"
+          # remove v
+          version="${version//v/}"
+
+          # store
+          cargo set-version ${version}
+
+          git diff
+
+          # debug
+          cat Cargo.toml
+
+      - uses: rust-lang/crates-io-auth-action@bbd81622f20ce9e2dd9622e3218b975523e45bbe # v1.0.4
+        id: auth
+
+      - name: Publish
+        shell: bash
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+        run: |
+          # we don't commit the version number in our codebase
+          cargo publish --allow-dirty

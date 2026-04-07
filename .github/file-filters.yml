@@ -1,9 +1,14 @@
-code:
-  - "src/**"
-  - "TAG"
-  - Cargo.lock
-  - "*.toml"
-  - "tests/**"
+shared: &shared
   - ".github/**"
-  - "package.json"
-  - "package-lock.json"
+  - ".nvmrc"
+  - "build-scripts/**"
+docker:
+  - *shared
+  - Dockerfile
+rust:
+  - *shared
+  - ".cargo/**"
+  - "**/*.toml"
+  - "src/**"
+  - "tests/**"
+  - Cargo.lock

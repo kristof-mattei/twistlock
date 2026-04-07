@@ -1,39 +1,17 @@
 {
-  "name": "twistlock",
-  "version": "0.0.0-development",
-  "description": "It's written in Rust!",
-  "main": "src/main.rs",
-  "scripts": {
-    "prettier": "prettier --write .",
-    "release": "semantic-release"
-  },
-  "engines": {
-    "node": ">=v18.16.0",
-    "npm": ">=9.6.7"
-  },
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/kristof-mattei/twistlock.git"
-  },
-  "author": "",
-  "license": "ISC",
-  "bugs": {
-    "url": "https://github.com/kristof-mattei/twistlock/issues"
-  },
-  "homepage": "https://github.com/kristof-mattei/twistlock#readme",
-  "devDependencies": {
-    "@actions/tool-cache": "^2.0.1",
-    "@semantic-release/changelog": "^6.0.3",
-    "@semantic-release/commit-analyzer": "^9.0.2",
-    "@semantic-release/github": "^8.0.7",
-    "@semantic-release/release-notes-generator": "^11.0.1",
-    "conventional-changelog-conventionalcommits": "^5.0.0",
-    "prettier": "^2.8.8",
-    "semantic-release": "^21.0.2",
-    "semver": "^7.5.1",
-    "serialize-error": "^11.0.0"
-  },
-  "publishConfig": {
-    "access": "restricted"
-  }
+    "name": "twistlock",
+    "type": "module",
+    "packageManager": "pnpm@10.33.0+sha512.10568bb4a6afb58c9eb3630da90cc9516417abebd3fabbe6739f0ae795728da1491e9db5a544c76ad8eb7570f5c4bb3d6c637b2cb41bfdcdb47fa823c8649319",
+    "engines": {
+        "node": "24.14.1",
+        "pnpm": "10.33.0"
+    },
+    "scripts": {
+        "format": "prettier --write ."
+    },
+    "devDependencies": {
+        "prettier": "3.8.1",
+        "prettier-plugin-sh": "0.18.1",
+        "prettier-plugin-toml": "2.0.6"
+    }
 }
