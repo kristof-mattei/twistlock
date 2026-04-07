@@ -160,7 +160,7 @@ jobs:
 
       - name: Set the new TAGs
         id: meta
-        uses: docker/metadata-action@c4ee3adeed93b1fa6a762f209fb01608c1a22f1e # v4.4.0
+        uses: docker/metadata-action@030e881283bb7a6894de51c315a6bfe6a94e05cf # v6.0.0
         with:
           images: "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}"
           flavor: |
