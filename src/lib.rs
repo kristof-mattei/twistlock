@@ -1,17 +1,12 @@
-#![cfg_attr(not(debug_assertions), deny(warnings))]
-#![deny(clippy::all)]
-#![deny(clippy::pedantic)]
-#![deny(clippy::cargo)]
-#![forbid(non_ascii_idents)]
-#![allow(clippy::uninlined_format_args)]
-
+#[must_use] 
 pub fn add(left: usize, right: usize) -> usize {
     left + right
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::add;
+    use pretty_assertions::assert_eq;
 
     #[test]
     fn it_works() {
