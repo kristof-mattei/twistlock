@@ -121,7 +121,7 @@ impl Container {
 mod tests {
     use pretty_assertions::assert_eq;
 
-    use crate::docker::container::Container;
+    use crate::models::container::Container;
 
     #[test]
     fn deserialize() {
