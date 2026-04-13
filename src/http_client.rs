@@ -121,7 +121,7 @@ pub async fn execute_request<C, B>(
 ) -> Result<Response<hyper::body::Incoming>, hyper_util::client::legacy::Error>
 where
     C: Connect + Clone + Send + Sync + 'static,
-    B: Body + Send + 'static + Unpin,
+    B: Body + Send + Unpin + 'static,
     B::Data: Send,
     B::Error: Into<Box<dyn std::error::Error + Send + Sync>>,
 {

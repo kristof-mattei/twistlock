@@ -1,4 +1,4 @@
-absolute-paths-allowed-crates = ["hyper_util", "hyper", "std"]
+absolute-paths-allowed-crates = ["hyper_util", "hyper", "std", "tokio"]
 disallowed-macros = [
     { path = "std::assert_ne", reason = "use `pretty_assertions::assert_ne` instead" },
     { path = "std::assert_eq", reason = "use `pretty_assertions::assert_eq` instead" },
