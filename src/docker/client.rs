@@ -2,7 +2,6 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use color_eyre::{Section as _, eyre};
-use http::StatusCode;
 use http_body_util::{BodyExt as _, Full};
 use hyper::body::{Bytes, Incoming};
 use hyper::{Method, Response};
@@ -20,7 +19,12 @@ use tokio::time::timeout;
 use tokio_util::sync::CancellationToken;
 use tracing::{Level, event};
 
-use crate::docker::config::{Config, Endpoint};
+use crate::docker::config::{Config, Endpoint as ConfigEndpoint};
+use crate::docker::endpoint::{Endpoint, EndpointCallError};
+use crate::docker::endpoints::containers::{
+    InspectContainer, ListContainers, RestartContainer, RestartContainerRequest,
+};
+use crate::docker::endpoints::networks::{InspectNetwork, ListNetworks};
 use crate::filters::Filters;
 use crate::http_client;
 use crate::http_client::{build_request, execute_request};
@@ -97,7 +101,7 @@ impl Client {
         timeout: Duration,
     ) -> Result<Client, eyre::Report> {
         let daemon = match config.endpoint {
-            Endpoint::Direct { url, timeout } => {
+            ConfigEndpoint::Direct { url, timeout } => {
                 let client_credentials = match (client_cert, client_key) {
                     (Some(client_cert), Some(client_key)) => Some(ClientCredentials {
                         key: PrivateKeyDer::from_pem_file(client_key)?,
@@ -133,7 +137,7 @@ impl Client {
                     docker_timeout: timeout,
                 }
             },
-            Endpoint::Socket(path_buf) => {
+            ConfigEndpoint::Socket(path_buf) => {
                 // we're connecting over a socket, so the url is localhost
 
                 let connector: UnixSocketConnector<PathBuf> = UnixSocketConnector::new(path_buf);
@@ -178,6 +182,61 @@ impl Client {
         }
     }
 
+    /// Call a typed [`Endpoint`], returning a structured error on failure.
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    ///
+    /// * Failure to build the path and query
+    /// * Failure to send the request
+    /// * Response is not success
+    /// * Failed to deserialize the response
+    pub async fn call<E: Endpoint>(
+        &self,
+        request: &E::Request,
+    ) -> Result<E::Response, EndpointCallError<E::Error>> {
+        let path_and_query = E::path_and_query(request)
+            .map_err(|error| EndpointCallError::Transport(error.into()))?;
+
+        let response = self
+            .send_request(&path_and_query, E::METHOD)
+            .await
+            .map_err(EndpointCallError::Transport)?;
+
+        let status_code = response.status();
+
+        let bytes = response
+            .collect()
+            .await
+            .map_err(|error| EndpointCallError::Transport(error.into()))?
+            .to_bytes();
+
+        if status_code.is_success() {
+            E::parse_response(&bytes).map_err(|error| {
+                event!(Level::ERROR, ?error, message = %String::from_utf8_lossy(&bytes), "Failed to deserialize response");
+                EndpointCallError::Transport(error.into())
+            })
+        } else {
+            if let Ok(typed_err) = serde_json::from_slice::<E::Error>(&bytes) {
+                return Err(EndpointCallError::Typed(typed_err));
+            }
+
+            if let Ok(generic) = serde_json::from_slice::<serde_json::Value>(&bytes) {
+                return Err(EndpointCallError::Generic(generic));
+            }
+
+            let body = String::from_utf8_lossy(&bytes).into_owned();
+
+            event!(Level::ERROR, %status_code, message = %body, "Invalid response");
+
+            Err(EndpointCallError::HttpError {
+                status: status_code,
+                body,
+            })
+        }
+    }
+
     /// Get all containers based on a filter.
     ///
     /// # Errors
@@ -186,18 +245,11 @@ impl Client {
     ///
     /// * Failure to send the request
     /// * Response is not success
-    pub async fn get_containers(&self, filters: &Filters) -> Result<Vec<Container>, eyre::Report> {
-        let path_and_query = format!("/containers/json?filters={}", &url_encode(&filters)?);
-
-        let response = self.send_request(&path_and_query, Method::GET).await?;
-
-        let bytes = response.collect().await?.to_bytes();
-
-        let result = serde_json::from_slice::<Vec<Container>>(&bytes).inspect_err(|error| {
-            event!(Level::ERROR, ?error, message = %String::from_utf8_lossy(&bytes), "Failed to deserialize response");
-        })?;
-
-        Ok(result)
+    pub async fn get_containers(
+        &self,
+        filters: &Filters,
+    ) -> Result<Vec<Container>, EndpointCallError<<ListContainers as Endpoint>::Error>> {
+        self.call::<ListContainers>(filters).await
     }
 
     /// Inspect container.
@@ -208,18 +260,11 @@ impl Client {
     ///
     /// * Failure to send the request
     /// * Response is not success
-    pub async fn inspect_container(&self, id: &str) -> Result<ContainerInspect, eyre::Report> {
-        let path_and_query = format!("/containers/{}/json", id);
-
-        let response = self.send_request(&path_and_query, Method::GET).await?;
-
-        let bytes = response.collect().await?.to_bytes();
-
-        let result = serde_json::from_slice::<ContainerInspect>(&bytes).inspect_err(|error| {
-            event!(Level::ERROR, ?error, message = %String::from_utf8_lossy(&bytes), "Failed to deserialize response");
-        })?;
-
-        Ok(result)
+    pub async fn inspect_container(
+        &self,
+        id: &str,
+    ) -> Result<ContainerInspect, EndpointCallError<<InspectContainer as Endpoint>::Error>> {
+        self.call::<InspectContainer>(id).await
     }
 
     /// Get all networks.
@@ -230,16 +275,10 @@ impl Client {
     ///
     /// * Failure to send the request
     /// * Response is not success
-    pub async fn list_networks(&self) -> Result<Vec<NetworkSummary>, eyre::Report> {
-        let response = self.send_request("/networks", Method::GET).await?;
-
-        let bytes = response.collect().await?.to_bytes();
-
-        let result = serde_json::from_slice::<Vec<NetworkSummary>>(&bytes).inspect_err(|error| {
-            event!(Level::ERROR, ?error, message = %String::from_utf8_lossy(&bytes), "Failed to deserialize response");
-        })?;
-
-        Ok(result)
+    pub async fn list_networks(
+        &self,
+    ) -> Result<Vec<NetworkSummary>, EndpointCallError<<ListNetworks as Endpoint>::Error>> {
+        self.call::<ListNetworks>(&()).await
     }
 
     /// Inspect network.
@@ -250,29 +289,11 @@ impl Client {
     ///
     /// * Failure to send the request
     /// * Response is not success
-    pub async fn inspect_network(&self, id: &str) -> Result<NetworkInspect, eyre::Report> {
-        let path_and_query = format!("/networks/{id}");
-
-        let response = self.send_request(&path_and_query, Method::GET).await?;
-
-        let status_code = response.status();
-
-        let bytes = response.collect().await?.to_bytes();
-
-        if StatusCode::is_success(&status_code) {
-            let result = serde_json::from_slice::<NetworkInspect>(&bytes).inspect_err(|error| {
-                event!(Level::ERROR, ?error, message = %String::from_utf8_lossy(&bytes), "Failed to deserialize response");
-            })?;
-
-            Ok(result)
-        } else {
-            event!(Level::ERROR, %status_code, message = %String::from_utf8_lossy(&bytes), "Invalid response");
-
-            Err(eyre::Report::msg(format!(
-                "Tried to inspect network but it failed with {}",
-                status_code
-            )))
-        }
+    pub async fn inspect_network(
+        &self,
+        id: &str,
+    ) -> Result<NetworkInspect, EndpointCallError<<InspectContainer as Endpoint>::Error>> {
+        self.call::<InspectNetwork>(id).await
     }
 
     /// Restart a container.
@@ -287,25 +308,12 @@ impl Client {
         &self,
         container_id: &str,
         timeout: std::time::Duration,
-    ) -> Result<(), eyre::Report> {
-        let path_and_query = format!(
-            "/containers/{}/restart?t={}",
-            container_id,
-            timeout.as_secs()
-        );
-
-        let response = self.send_request(&path_and_query, Method::POST).await?;
-
-        let status_code = response.status();
-
-        if StatusCode::is_success(&status_code) {
-            Ok(())
-        } else {
-            Err(eyre::Report::msg(format!(
-                "Tried to restart container but it failed with {:?}",
-                status_code
-            )))
-        }
+    ) -> Result<(), EndpointCallError<<RestartContainer as Endpoint>::Error>> {
+        self.call::<RestartContainer>(&RestartContainerRequest {
+            id: container_id.to_owned(),
+            timeout,
+        })
+        .await
     }
 
     /// Listen for events.
