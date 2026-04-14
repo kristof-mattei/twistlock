@@ -38,8 +38,6 @@ pub enum DockerEndpoint {
     Tls(HttpClient<HttpsConnector<HttpConnector>, Full<Bytes>>),
 }
 
-pub struct DockerClient {}
-
 struct ClientCredentials {
     key: PrivateKeyDer<'static>,
     certs: Vec<CertificateDer<'static>>,
@@ -101,7 +99,7 @@ impl Client {
         timeout: Duration,
     ) -> Result<Client, eyre::Report> {
         let daemon = match config.endpoint {
-            ConfigEndpoint::Direct { url, timeout } => {
+            ConfigEndpoint::Direct(url) => {
                 let client_credentials = match (client_cert, client_key) {
                     (Some(client_cert), Some(client_key)) => Some(ClientCredentials {
                         key: PrivateKeyDer::from_pem_file(client_key)?,
