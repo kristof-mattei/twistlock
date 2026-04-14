@@ -142,7 +142,7 @@ impl std::fmt::Display for Health {
 // Notable exception: `is_task`.
 // by default there is an implicit `status=["running"]` filter. If you want to see e.g. `exited=["1"]`
 // you have to manually include a `status=["exited"]`...
-#[derive(Serialize)]
+#[derive(Serialize, Default)]
 pub struct Filters {
     #[serde(
         serialize_with = "single_to_string_array",
