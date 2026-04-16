@@ -122,7 +122,7 @@ jobs:
           fetch-depth: 0
 
       - name: Install git-cliff to generate changelog & next version number
-        uses: taiki-e/install-action@6e4b50d359005dacdb018fa32c03bc35522c6616 # v2.75.12
+        uses: taiki-e/install-action@5939f3337e40968c39aa70f5ecb1417a92fb25a0 # v2.75.15
         with:
           tool: git-cliff
 
@@ -165,7 +165,7 @@ jobs:
       - *checkout
 
       - name: Install cargo-edit to do set-version
-        uses: taiki-e/install-action@6e4b50d359005dacdb018fa32c03bc35522c6616 # v2.75.12
+        uses: taiki-e/install-action@5939f3337e40968c39aa70f5ecb1417a92fb25a0 # v2.75.15
         with:
           tool: cargo-edit
 
@@ -372,7 +372,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       registry:
-        image: registry:3@sha256:afcd13fd045b8859ac4f60fef26fc2d2f9b7b9d9e604c3c4f7c2fb1b94f95a64
+        image: registry:3@sha256:8a7c1aae9db5028cbc1cfe83e5969d270a50e8bc0b72eef3cc5657542ec383c9
         ports:
           - 5000:5000
     outputs:
