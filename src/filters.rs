@@ -103,6 +103,7 @@ impl std::fmt::Display for Status {
     }
 }
 
+#[derive(Eq, PartialEq, Hash, Debug)]
 pub enum Health {
     Starting,
     Healthy,
@@ -142,7 +143,7 @@ impl std::fmt::Display for Health {
 // Notable exception: `is_task`.
 // by default there is an implicit `status=["running"]` filter. If you want to see e.g. `exited=["1"]`
 // you have to manually include a `status=["exited"]`...
-#[derive(Serialize)]
+#[derive(Serialize, Default)]
 pub struct Filters {
     #[serde(
         serialize_with = "single_to_string_array",
@@ -155,7 +156,7 @@ pub struct Filters {
     // `is-task=["true", "false"]` is invalid.
     // `is-task=[]` is invalid.
     // `is-task=null` is invalid.
-    is_task: Option<bool>,
+    pub is_task: Option<bool>,
 
     #[serde(
         serialize_with = "multiple_to_string_array",
@@ -163,7 +164,7 @@ pub struct Filters {
     )]
     /// Container Status, multiple values means containers with `StatusA OR StatusB`.
     // status=(created|restarting|running|removing|paused|exited|dead)
-    status: Option<HashSet<Status>>,
+    pub status: Option<HashSet<Status>>,
 
     #[serde(
         serialize_with = "multiple_to_string_array",
@@ -176,7 +177,7 @@ pub struct Filters {
     ///
     /// TODO: This has NO effect if `Status::Exited` is NOT included in `status`.
     // exited=<int> containers with exit code of <int>
-    exited: Option<HashSet<i32>>,
+    pub exited: Option<HashSet<i32>>,
 
     #[serde(
         serialize_with = "serialize_labels",
@@ -188,7 +189,7 @@ pub struct Filters {
     /// * Does not include exited containers by default.
     /// * Filters are not `boolean`, e.g. `traefik.enable=false` is not the opposite set of `traefik.enable=true`.
     // label=key or label="key=value" of a container label
-    label: Option<HashMap<Box<str>, Option<Box<str>>>>,
+    pub label: Option<HashMap<Box<str>, Option<Box<str>>>>,
 
     #[serde(
         serialize_with = "multiple_to_string_array",
@@ -199,7 +200,7 @@ pub struct Filters {
     /// Notes:
     /// * Does not include exited containers by default.
     // health=(starting|healthy|unhealthy|none)
-    health: Option<HashSet<Health>>,
+    pub health: Option<HashSet<Health>>,
 
     #[serde(
         serialize_with = "multiple_to_string_array",
@@ -211,7 +212,7 @@ pub struct Filters {
     /// * Does not include exited containers by default.
     /// * `/foo` and `foo` are the same.
     // name=<name> a container's name
-    name: Option<HashSet<Box<str>>>,
+    pub name: Option<HashSet<Box<str>>>,
 
     #[serde(
         serialize_with = "multiple_to_string_array",
@@ -224,7 +225,7 @@ pub struct Filters {
     /// * You do not need to provide the full ID, however, if you provide a partial it needs to uniquely match the container.
     ///   if 2 containers start with the same partial ID, nothing is returned
     // id=<ID> a container's ID
-    id: Option<HashSet<Box<str>>>,
+    pub id: Option<HashSet<Box<str>>>,
 
     #[serde(
         serialize_with = "multiple_to_string_array",
@@ -235,7 +236,7 @@ pub struct Filters {
     /// Notes:
     /// * Does not include exited containers by default.
     // volume=(<volume name> or <mount point destination>)
-    volume: Option<HashSet<Box<str>>>,
+    pub volume: Option<HashSet<Box<str>>>,
 
     #[serde(
         serialize_with = "multiple_to_string_array",
@@ -246,7 +247,7 @@ pub struct Filters {
     /// Notes:
     /// * Does not include exited containers by default.
     // network=(<network id> or <network name>)
-    network: Option<HashSet<Box<str>>>,
+    pub network: Option<HashSet<Box<str>>>,
 
     #[serde(
         serialize_with = "multiple_to_string_array",
@@ -263,7 +264,7 @@ pub struct Filters {
     /// * Does not include exited containers by default.
     // Does not support `null` or `[]`. Passing in these values filters out the whole list.
     // ancestor=(<image-name>[:<tag>], <image id>, or <image@digest>)
-    ancestor: Option<HashSet<Box<str>>>,
+    pub ancestor: Option<HashSet<Box<str>>>,
 
     #[serde(
         serialize_with = "single_to_string_array",
@@ -275,7 +276,7 @@ pub struct Filters {
     /// * Does not include exited containers by default.
     // API takes `[...]` but only last value is considered
     // before=(<container id> or <container name>)
-    before: Option<Box<str>>,
+    pub before: Option<Box<str>>,
 
     #[serde(
         serialize_with = "single_to_string_array",
@@ -287,7 +288,7 @@ pub struct Filters {
     /// * Does not include exited containers by default.
     // API takes `[...]` but only last value is considered
     // since=(<container id> or <container name>)
-    since: Option<Box<str>>,
+    pub since: Option<Box<str>>,
 
     #[serde(
         serialize_with = "multiple_to_string_array",
@@ -303,7 +304,7 @@ pub struct Filters {
     /// * Does not include exited containers by default.
     /// * API defines an alias of `expose`.
     // publish=(<port>[/<proto>]|<startport-endport>/[<proto>])
-    publish: Option<HashSet<Box<str>>>,
+    pub publish: Option<HashSet<Box<str>>>,
     // alias of `publish`
     // expose=(<port>[/<proto>]|<startport-endport>/[<proto>])
     // expose: Option<HashSet<Box<str>>>,
