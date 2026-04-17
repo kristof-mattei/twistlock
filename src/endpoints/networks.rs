@@ -1,6 +1,6 @@
 use hyper::Method;
 
-use crate::docker::endpoint::Endpoint;
+use crate::endpoint::Endpoint;
 use crate::models::network::{NetworkInspect, NetworkSummary};
 
 pub struct ListNetworks;

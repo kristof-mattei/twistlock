@@ -2,8 +2,8 @@ use std::time::Duration;
 
 use hyper::Method;
 
-use crate::docker::client::url_encode;
-use crate::docker::endpoint::Endpoint;
+use crate::client::url_encode;
+use crate::endpoint::Endpoint;
 use crate::filters::Filters;
 use crate::models::container::Container;
 use crate::models::container_inspect::ContainerInspect;
