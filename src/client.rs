@@ -19,12 +19,12 @@ use tokio::time::timeout;
 use tokio_util::sync::CancellationToken;
 use tracing::{Level, event};
 
-use crate::docker::config::{Config, Endpoint as ConfigEndpoint};
-use crate::docker::endpoint::{Endpoint, EndpointCallError};
-use crate::docker::endpoints::containers::{
+use crate::config::{Config, Endpoint as ConfigEndpoint};
+use crate::endpoint::{Endpoint, EndpointCallError};
+use crate::endpoints::containers::{
     InspectContainer, ListContainers, RestartContainer, RestartContainerRequest,
 };
-use crate::docker::endpoints::networks::{InspectNetwork, ListNetworks};
+use crate::endpoints::networks::{InspectNetwork, ListNetworks};
 use crate::filters::Filters;
 use crate::http_client;
 use crate::http_client::{build_request, execute_request};
