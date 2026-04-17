@@ -69,22 +69,13 @@ impl Container {
     }
 
     #[must_use]
-    pub fn get_name(&self) -> Option<Box<str>> {
-        let mut iter = self.names.iter();
+    pub fn get_name(&self) -> Option<&str> {
+        self.names.first().map(|n| &**n)
+    }
 
-        if let Some(first) = iter.next() {
-            use std::fmt::Write as _;
-
-            let mut names = (**first).to_owned();
-
-            for next in iter {
-                write!(names, ", {}", next).expect("Writing to a String never fails");
-            }
-
-            Some(names.into_boxed_str())
-        } else {
-            None
-        }
+    #[must_use]
+    pub fn get_names(&self) -> &[Box<str>] {
+        &self.names
     }
 }
 
