@@ -1,4 +1,9 @@
 <!-- header goes here -->
+## [0.1.1](https://github.com/kristof-mattei/twistlock/compare/v0.1.0..v0.1.1) - 2026-04-17
+
+### ⚙️ Miscellaneous Tasks
+
+- General renames for clarity by [@kristof-mattei](https://github.com/kristof-mattei) ([`6da6f1a`](https://github.com/kristof-mattei/twistlock/commit/6da6f1a1d196c438da5a814ccb3b99a843035778))
 ## [0.1.0](https://github.com/kristof-mattei/twistlock/compare/v0.0.2..v0.1.0) - 2026-04-17
 
 ### 🚀 Features
