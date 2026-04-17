@@ -1,4 +1,14 @@
 <!-- header goes here -->
+## [0.2.0](https://github.com/kristof-mattei/twistlock/compare/v0.1.2..v0.2.0) - 2026-04-17
+
+### 🚀 Features
+
+- [**breaking**] Get_name now only returns the first name by [@kristof-mattei](https://github.com/kristof-mattei) ([`ea4d6f2`](https://github.com/kristof-mattei/twistlock/commit/ea4d6f2ebf9ac429888a3c9d0325667473d8059c))
+
+### ⚙️ Miscellaneous Tasks
+
+- Remove unused file by [@kristof-mattei](https://github.com/kristof-mattei) ([`7aa21c5`](https://github.com/kristof-mattei/twistlock/commit/7aa21c5c7581271a985cd2666af03e397ea7dac1))
+- Http client is internal detail by [@kristof-mattei](https://github.com/kristof-mattei) ([`5b8e09a`](https://github.com/kristof-mattei/twistlock/commit/5b8e09acde151b0da517997914b257e3a27a159c))
 ## [0.1.2](https://github.com/kristof-mattei/twistlock/compare/v0.1.1..v0.1.2) - 2026-04-17
 
 ### 🐛 Bug Fixes
