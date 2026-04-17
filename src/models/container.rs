@@ -1,8 +1,7 @@
 use std::fmt;
-use std::marker::PhantomData;
-use std::str::FromStr;
 
-use serde::de::{MapAccess, SeqAccess, Visitor};
+use hashbrown::HashMap;
+use serde::de::{SeqAccess, Visitor};
 use serde::{Deserialize, Deserializer};
 
 use crate::models::container_inspect::ContainerNetworkSettings;
@@ -45,44 +44,6 @@ where
     deserializer.deserialize_seq(visitor)
 }
 
-fn deserialize_timeout<'de, T, D>(deserializer: D) -> Result<Option<T>, D::Error>
-where
-    T: Deserialize<'de> + FromStr,
-    T::Err: std::fmt::Debug,
-    D: Deserializer<'de>,
-{
-    struct MapVisitor<V>(PhantomData<fn() -> V>);
-
-    impl<'de, V> Visitor<'de> for MapVisitor<V>
-    where
-        V: Deserialize<'de> + FromStr,
-        V::Err: std::fmt::Debug,
-    {
-        type Value = Option<V>;
-
-        fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-            formatter.write_str("a nonempty sequence of items")
-        }
-
-        fn visit_map<M>(self, mut map: M) -> Result<Self::Value, M::Error>
-        where
-            M: MapAccess<'de>,
-        {
-            while let Some((key, value)) = map.next_entry::<String, String>()? {
-                if key == "autoheal.stop.timeout" {
-                    let v = Some(value.parse::<V>().unwrap());
-                    return Ok(v);
-                }
-            }
-
-            Ok(None)
-        }
-    }
-
-    let visitor = MapVisitor(PhantomData);
-    deserializer.deserialize_map(visitor)
-}
-
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "PascalCase")]
 pub struct Container {
@@ -91,9 +52,7 @@ pub struct Container {
     #[serde(rename(deserialize = "Names"))]
     pub names: Box<[Box<str>]>,
     pub state: Box<str>,
-    #[serde(deserialize_with = "deserialize_timeout")]
-    #[serde(rename(deserialize = "Labels"))]
-    pub timeout: Option<u32>,
+    pub labels: HashMap<Box<str>, Box<str>>,
     // The network settings do differ between list all containers and inspect container
     // but since we only use the common ones, we can reuse the type
     pub network_settings: ContainerNetworkSettings,
@@ -108,22 +67,30 @@ impl Container {
         )]
         &self.id[0..12]
     }
+
     #[must_use]
-    pub fn get_name(&self) -> Option<String> {
-        self.names
-            .iter()
-            .map(|s| (**s).to_owned())
-            .reduce(|mut p, n| {
-                p.push(',');
-                p.push(' ');
-                p.push_str(&n);
-                p
-            })
+    pub fn get_name(&self) -> Option<Box<str>> {
+        let mut iter = self.names.iter();
+
+        if let Some(first) = iter.next() {
+            use std::fmt::Write as _;
+
+            let mut names = (**first).to_owned();
+
+            for next in iter {
+                write!(names, ", {}", next).expect("Writing to a String never fails");
+            }
+
+            Some(names.into_boxed_str())
+        } else {
+            None
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use hashbrown::HashMap;
     use pretty_assertions::assert_eq;
 
     use crate::models::container::Container;
@@ -146,7 +113,7 @@ mod tests {
         assert_eq!(containers[0].names.len(), 1);
         assert_eq!(containers[0].names[0].as_ref(), "photoprism");
         assert_eq!(containers[0].state.as_ref(), "running");
-        assert_eq!(containers[0].timeout, None);
+        assert_eq!(containers[0].labels, HashMap::new());
 
         assert_eq!(
             containers[1].id.as_ref(),
@@ -155,7 +122,7 @@ mod tests {
         assert_eq!(containers[1].names.len(), 1);
         assert_eq!(containers[1].names[0].as_ref(), "whoogle-search");
         assert_eq!(containers[1].state.as_ref(), "running");
-        assert_eq!(containers[1].timeout, None);
+        assert_eq!(containers[0].labels, HashMap::new());
     }
 
     #[test]
@@ -177,7 +144,7 @@ mod tests {
         assert_eq!(containers[0].names[0].as_ref(), "photoprism-1");
         assert_eq!(containers[0].names[1].as_ref(), "photoprism-2");
         assert_eq!(containers[0].state.as_ref(), "running");
-        assert_eq!(containers[0].timeout, None);
+        assert_eq!(containers[0].labels, HashMap::new());
     }
 
     #[test]
@@ -198,7 +165,10 @@ mod tests {
         assert_eq!(containers[0].names.len(), 1);
         assert_eq!(containers[0].names[0].as_ref(), "photoprism");
         assert_eq!(containers[0].state.as_ref(), "running");
-        assert_eq!(containers[0].timeout, Some(12));
+        assert_eq!(
+            containers[0].labels,
+            HashMap::from_iter([("autoheal.stop.timeout".into(), "12".into())])
+        );
     }
 
     #[test]
@@ -228,7 +198,10 @@ mod tests {
         assert_eq!(containers[0].names.len(), 1);
         assert_eq!(containers[0].names[0].as_ref(), "photoprism");
         assert_eq!(containers[0].state.as_ref(), "running");
-        assert_eq!(containers[0].timeout, None);
+        assert_eq!(
+            containers[0].labels,
+            HashMap::from_iter([("autoheal.stop.other_label".into(), "some_value".into())])
+        );
     }
 
     #[test]
@@ -257,7 +230,10 @@ mod tests {
         );
         assert_eq!(containers[0].names.len(), 0);
         assert_eq!(containers[0].state.as_ref(), "running");
-        assert_eq!(containers[0].timeout, None);
+        assert_eq!(
+            containers[0].labels,
+            HashMap::from_iter([("autoheal.stop.other_label".into(), "some_value".into())])
+        );
     }
 
     #[test]
@@ -279,7 +255,7 @@ mod tests {
         assert_eq!(containers[0].names[0].as_ref(), "photoprism-1");
         assert_eq!(containers[0].names[1].as_ref(), "photoprism-2");
         assert_eq!(containers[0].state.as_ref(), "running");
-        assert_eq!(containers[0].timeout, None);
+        assert_eq!(containers[0].labels, HashMap::new());
     }
 
     #[test]
@@ -292,7 +268,7 @@ mod tests {
 
         assert_eq!(
             deserialized.unwrap_err().to_string(),
-            "invalid type: string \"I am not a map, but a string\", expected a nonempty sequence of items at line 1 column 148"
+            "invalid type: string \"I am not a map, but a string\", expected a map at line 1 column 148"
         );
     }
 }
