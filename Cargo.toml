@@ -2,7 +2,7 @@
 name = "twistlock"
 version = "0.0.0-development"
 edition = "2024"
-rust-version = "1.94.1"
+rust-version = "1.95.0"
 authors = ["Kristof Mattei"]
 description = "Docker <> Rust API"
 license = "MIT"
