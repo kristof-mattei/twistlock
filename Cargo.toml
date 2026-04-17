@@ -9,7 +9,7 @@ license = "MIT"
 categories = ["network-programming"]
 keywords = ["docker", "api"]
 repository = "https://github.com/kristof-mattei/twistlock"
-include = ["src/**", "/LICENSE", "/LICENSE-*"]
+include = ["examples/**", "src/**", "tests/**", "/LICENSE", "/LICENSE-*"]
 
 [dependencies]
 color-eyre = "0.6.5"
