@@ -235,7 +235,7 @@ impl Client {
         }
     }
 
-    /// Get all containers based on a filter.
+    /// List all containers based on a filter.
     ///
     /// # Errors
     ///
@@ -243,7 +243,7 @@ impl Client {
     ///
     /// * Failure to send the request
     /// * Response is not success
-    pub async fn get_containers(
+    pub async fn list_containers(
         &self,
         filters: &Filters,
     ) -> Result<Vec<Container>, EndpointCallError<<ListContainers as Endpoint>::Error>> {
