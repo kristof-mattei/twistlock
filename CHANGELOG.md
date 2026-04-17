@@ -1,4 +1,9 @@
 <!-- header goes here -->
+## [0.1.0](https://github.com/kristof-mattei/twistlock/compare/v0.0.2..v0.1.0) - 2026-04-17
+
+### 🚀 Features
+
+- Readme by [@kristof-mattei](https://github.com/kristof-mattei) ([`409089c`](https://github.com/kristof-mattei/twistlock/commit/409089c55578aab158544d188f24adb15a102519))
 ## [0.0.2](https://github.com/kristof-mattei/twistlock/compare/v0.0.1..v0.0.2) - 2026-04-17
 
 ### ⚙️ Miscellaneous Tasks
