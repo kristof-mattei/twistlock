@@ -2,28 +2,21 @@
 use std::path::PathBuf;
 use std::str::FromStr;
 
-#[derive(Clone, Debug)]
-pub enum RawEndpoint {
-    Direct(http::Uri),
-    #[cfg(not(target_os = "windows"))]
-    Socket(PathBuf),
-}
-
-impl std::fmt::Display for RawEndpoint {
+impl std::fmt::Display for Endpoint {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match *self {
-            RawEndpoint::Direct(ref uri) => {
+            Endpoint::Direct(ref uri) => {
                 write!(f, "{}", uri)
             },
             #[cfg(not(target_os = "windows"))]
-            RawEndpoint::Socket(ref socket) => {
+            Endpoint::Socket(ref socket) => {
                 write!(f, "{}", socket.display())
             },
         }
     }
 }
 
-impl FromStr for RawEndpoint {
+impl FromStr for Endpoint {
     type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -32,7 +25,7 @@ impl FromStr for RawEndpoint {
         let endpoint = if let Some(stripped) = s.strip_prefix(TCP_START) {
             let uri = format!("http://{}", stripped);
 
-            RawEndpoint::Direct(
+            Endpoint::Direct(
                 uri.parse()
                     .map_err(|error| format!("Failed to convert `{}` to URL: {}", uri, error))?,
             )
@@ -51,7 +44,7 @@ impl FromStr for RawEndpoint {
                     return Err("Docker socket cannot be empty".to_owned());
                 }
 
-                RawEndpoint::Socket(PathBuf::from(s))
+                Endpoint::Socket(PathBuf::from(s))
             }
         };
 
@@ -59,24 +52,9 @@ impl FromStr for RawEndpoint {
     }
 }
 
-pub struct Config {
-    pub endpoint: Endpoint,
-}
-
+#[derive(Clone, Debug)]
 pub enum Endpoint {
     Direct(http::Uri),
     #[cfg(not(target_os = "windows"))]
     Socket(PathBuf),
-}
-
-impl Config {
-    pub fn build(raw_endpoint: RawEndpoint) -> Config {
-        let endpoint = match raw_endpoint {
-            RawEndpoint::Direct(uri) => Endpoint::Direct(uri),
-            #[cfg(not(target_os = "windows"))]
-            RawEndpoint::Socket(path_buf) => Endpoint::Socket(path_buf),
-        };
-
-        Config { endpoint }
-    }
 }
