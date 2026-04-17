@@ -1,4 +1,9 @@
 <!-- header goes here -->
+## [0.1.2](https://github.com/kristof-mattei/twistlock/compare/v0.1.1..v0.1.2) - 2026-04-17
+
+### 🐛 Bug Fixes
+
+- Timeouts are a client-specific value, removing and using general labels by [@kristof-mattei](https://github.com/kristof-mattei) ([`2cc5b9e`](https://github.com/kristof-mattei/twistlock/commit/2cc5b9e0b1911f3bde271c02c125764287578a93))
 ## [0.1.1](https://github.com/kristof-mattei/twistlock/compare/v0.1.0..v0.1.1) - 2026-04-17
 
 ### ⚙️ Miscellaneous Tasks
