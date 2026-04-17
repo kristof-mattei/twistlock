@@ -1,0 +1,61 @@
+❯ curl \
+    --unix-socket /var/run/docker.sock \
+    --header "Content-Type: application/json" \
+    --get http://localhost/containers/78b83d40d44f/json | jq
+{
+  "Id": "78b83d40d44fcb10efd2646c56b95d3bac7a9b61fba8b26c044e49dc17e2f194",
+  "NetworkSettings": {
+    "SandboxID": "<redacted>",
+    "SandboxKey": "/var/run/docker/netns/f3b04c7a862a",
+    "Ports": {
+        <redacted>
+    },
+    "Networks": {
+      "bridge_ipv4": {
+        "IPAMConfig": {
+          "IPv4Address": "<redacted>"
+        },
+        "Links": null,
+        "Aliases": null,
+        "DriverOpts": null,
+        "GwPriority": 0,
+        "NetworkID": "<redacted>",
+        "EndpointID": "<redacted>",
+        "Gateway": "<redacted>",
+        "IPAddress": "<redacted>",
+        "MacAddress": "<redacted>",
+        "IPPrefixLen": 23,
+        "IPv6Gateway": "",
+        "GlobalIPv6Address": "",
+        "GlobalIPv6PrefixLen": 0,
+        "DNSNames": [
+          "adguard",
+          "78b83d40d44f"
+        ]
+      },
+      "bridge_ipv6": {
+        "IPAMConfig": {
+          "IPv6Address": "<redacted>"
+        },
+        "Links": null,
+        "Aliases": null,
+        "DriverOpts": null,
+        "GwPriority": 0,
+        "NetworkID": "<redacted>",
+        "EndpointID": "<redacted>",
+        "Gateway": "",
+        "IPAddress": "",
+        "MacAddress": "<redacted>",
+        "IPPrefixLen": 0,
+        "IPv6Gateway": "<redacted>",
+        "GlobalIPv6Address": "<redacted>",
+        "GlobalIPv6PrefixLen": 64,
+        "DNSNames": [
+          "adguard",
+          "78b83d40d44f"
+        ]
+      }
+    }
+  },
+  ...
+}

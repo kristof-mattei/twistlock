@@ -3,7 +3,9 @@ use std::marker::PhantomData;
 use std::str::FromStr;
 
 use serde::de::{MapAccess, SeqAccess, Visitor};
-use serde::{Deserialize, Deserializer, Serialize};
+use serde::{Deserialize, Deserializer};
+
+use crate::models::container_inspect::ContainerNetworkSettings;
 
 fn deserialize_names<'de, D>(deserializer: D) -> Result<Box<[Box<str>]>, D::Error>
 where
@@ -81,7 +83,7 @@ where
     deserializer.deserialize_map(visitor)
 }
 
-#[derive(Serialize, Deserialize, Debug, Eq, PartialEq)]
+#[derive(Deserialize, Debug)]
 #[serde(rename_all = "PascalCase")]
 pub struct Container {
     pub id: Box<str>,
@@ -92,6 +94,9 @@ pub struct Container {
     #[serde(deserialize_with = "deserialize_timeout")]
     #[serde(rename(deserialize = "Labels"))]
     pub timeout: Option<u32>,
+    // The network settings do differ between list all containers and inspect container
+    // but since we only use the common ones, we can reuse the type
+    pub network_settings: ContainerNetworkSettings,
 }
 
 impl Container {
@@ -125,72 +130,80 @@ mod tests {
 
     #[test]
     fn deserialize() {
-        let input = r#"[{"Id":"582036c7a5e8719bbbc9476e4216bfaf4fd318b61723f41f2e8fe3b60d8182ae","Names":["/photoprism"],"Labels":{},"State":"running"},{"Id":"281ea0c72e2e4a41fd2f81df945da9dfbfbc7ea0fe5e59c3d2a8234552e367cf","Names":["/whoogle-search"],"Labels":{},"State":"running"}]"#;
+        let input = r#"[{"Id":"582036c7a5e8719bbbc9476e4216bfaf4fd318b61723f41f2e8fe3b60d8182ae","Names":["/photoprism"],"Labels":{},"State":"running","NetworkSettings":{"Networks":{}}},{"Id":"281ea0c72e2e4a41fd2f81df945da9dfbfbc7ea0fe5e59c3d2a8234552e367cf","Names":["/whoogle-search"],"Labels":{},"State":"running","NetworkSettings":{"Networks":{}}}]"#;
 
         let deserialized: Result<Vec<Container>, _> = serde_json::from_slice(input.as_bytes());
 
         assert!(deserialized.is_ok());
 
+        let containers = deserialized.unwrap();
+        assert_eq!(containers.len(), 2);
+
         assert_eq!(
-            &[
-                Container {
-                    id: "582036c7a5e8719bbbc9476e4216bfaf4fd318b61723f41f2e8fe3b60d8182ae".into(),
-                    names: ["photoprism".into()].into(),
-                    state: "running".into(),
-                    timeout: None,
-                },
-                Container {
-                    id: "281ea0c72e2e4a41fd2f81df945da9dfbfbc7ea0fe5e59c3d2a8234552e367cf".into(),
-                    names: ["whoogle-search".into()].into(),
-                    state: "running".into(),
-                    timeout: None,
-                },
-            ][..],
-            deserialized.unwrap()
+            containers[0].id.as_ref(),
+            "582036c7a5e8719bbbc9476e4216bfaf4fd318b61723f41f2e8fe3b60d8182ae"
         );
+        assert_eq!(containers[0].names.len(), 1);
+        assert_eq!(containers[0].names[0].as_ref(), "photoprism");
+        assert_eq!(containers[0].state.as_ref(), "running");
+        assert_eq!(containers[0].timeout, None);
+
+        assert_eq!(
+            containers[1].id.as_ref(),
+            "281ea0c72e2e4a41fd2f81df945da9dfbfbc7ea0fe5e59c3d2a8234552e367cf"
+        );
+        assert_eq!(containers[1].names.len(), 1);
+        assert_eq!(containers[1].names[0].as_ref(), "whoogle-search");
+        assert_eq!(containers[1].state.as_ref(), "running");
+        assert_eq!(containers[1].timeout, None);
     }
 
     #[test]
     fn deserialize_multiple_names() {
-        let input = r#"[{"Id":"582036c7a5e8719bbbc9476e4216bfaf4fd318b61723f41f2e8fe3b60d8182ae","Names":["/photoprism-1","/photoprism-2"],"Labels":{}, "State":"running"}]"#;
+        let input = r#"[{"Id":"582036c7a5e8719bbbc9476e4216bfaf4fd318b61723f41f2e8fe3b60d8182ae","Names":["/photoprism-1","/photoprism-2"],"Labels":{}, "State":"running","NetworkSettings":{"Networks":{}}}]"#;
 
         let deserialized: Result<Vec<Container>, _> = serde_json::from_slice(input.as_bytes());
 
         assert!(deserialized.is_ok());
 
+        let containers = deserialized.unwrap();
+        assert_eq!(containers.len(), 1);
+
         assert_eq!(
-            &[Container {
-                id: "582036c7a5e8719bbbc9476e4216bfaf4fd318b61723f41f2e8fe3b60d8182ae".into(),
-                names: ["photoprism-1".into(), "photoprism-2".into()].into(),
-                state: "running".into(),
-                timeout: None,
-            }][..],
-            deserialized.unwrap()
+            containers[0].id.as_ref(),
+            "582036c7a5e8719bbbc9476e4216bfaf4fd318b61723f41f2e8fe3b60d8182ae"
         );
+        assert_eq!(containers[0].names.len(), 2);
+        assert_eq!(containers[0].names[0].as_ref(), "photoprism-1");
+        assert_eq!(containers[0].names[1].as_ref(), "photoprism-2");
+        assert_eq!(containers[0].state.as_ref(), "running");
+        assert_eq!(containers[0].timeout, None);
     }
 
     #[test]
     fn deserialize_timeout() {
-        let input = r#"[{"Id":"582036c7a5e8719bbbc9476e4216bfaf4fd318b61723f41f2e8fe3b60d8182ae","Names":["/photoprism"],"State":"running","Labels":{"autoheal.stop.timeout":"12"}}]"#;
+        let input = r#"[{"Id":"582036c7a5e8719bbbc9476e4216bfaf4fd318b61723f41f2e8fe3b60d8182ae","Names":["/photoprism"],"State":"running","Labels":{"autoheal.stop.timeout":"12"},"NetworkSettings":{"Networks":{}}}]"#;
 
         let deserialized: Result<Vec<Container>, _> = serde_json::from_slice(input.as_bytes());
 
         assert!(deserialized.is_ok());
 
+        let containers = deserialized.unwrap();
+        assert_eq!(containers.len(), 1);
+
         assert_eq!(
-            &[Container {
-                id: "582036c7a5e8719bbbc9476e4216bfaf4fd318b61723f41f2e8fe3b60d8182ae".into(),
-                names: ["photoprism".into()].into(),
-                state: "running".into(),
-                timeout: Some(12),
-            }][..],
-            deserialized.unwrap()
+            containers[0].id.as_ref(),
+            "582036c7a5e8719bbbc9476e4216bfaf4fd318b61723f41f2e8fe3b60d8182ae"
         );
+        assert_eq!(containers[0].names.len(), 1);
+        assert_eq!(containers[0].names[0].as_ref(), "photoprism");
+        assert_eq!(containers[0].state.as_ref(), "running");
+        assert_eq!(containers[0].timeout, Some(12));
     }
 
     #[test]
     fn deserialize_no_labels() {
-        let input = r#"[{"Id":"582036c7a5e8719bbbc9476e4216bfaf4fd318b61723f41f2e8fe3b60d8182ae","Names":["/photoprism"],"State":"running"}]"#;
+        let input = r#"[{"Id":"582036c7a5e8719bbbc9476e4216bfaf4fd318b61723f41f2e8fe3b60d8182ae","Names":["/photoprism"],"State":"running","NetworkSettings":{"Networks":{}}}]"#;
 
         let deserialized: Result<Vec<Container>, _> = serde_json::from_slice(input.as_bytes());
 
@@ -199,26 +212,28 @@ mod tests {
 
     #[test]
     fn deserialize_missing_timeout() {
-        let input = r#"[{"Id":"582036c7a5e8719bbbc9476e4216bfaf4fd318b61723f41f2e8fe3b60d8182ae","Names":["/photoprism"],"State":"running","Labels":{"autoheal.stop.other_label":"some_value"}}]"#;
+        let input = r#"[{"Id":"582036c7a5e8719bbbc9476e4216bfaf4fd318b61723f41f2e8fe3b60d8182ae","Names":["/photoprism"],"State":"running","Labels":{"autoheal.stop.other_label":"some_value"},"NetworkSettings":{"Networks":{}}}]"#;
 
         let deserialized: Result<Vec<Container>, _> = serde_json::from_slice(input.as_bytes());
 
         assert!(deserialized.is_ok());
 
+        let containers = deserialized.unwrap();
+        assert_eq!(containers.len(), 1);
+
         assert_eq!(
-            &[Container {
-                id: "582036c7a5e8719bbbc9476e4216bfaf4fd318b61723f41f2e8fe3b60d8182ae".into(),
-                names: ["photoprism".into()].into(),
-                state: "running".into(),
-                timeout: None,
-            }][..],
-            deserialized.unwrap()
+            containers[0].id.as_ref(),
+            "582036c7a5e8719bbbc9476e4216bfaf4fd318b61723f41f2e8fe3b60d8182ae"
         );
+        assert_eq!(containers[0].names.len(), 1);
+        assert_eq!(containers[0].names[0].as_ref(), "photoprism");
+        assert_eq!(containers[0].state.as_ref(), "running");
+        assert_eq!(containers[0].timeout, None);
     }
 
     #[test]
     fn deserialize_with_no_names_array() {
-        let input = r#"[{"Id":"582036c7a5e8719bbbc9476e4216bfaf4fd318b61723f41f2e8fe3b60d8182ae","State":"running","Labels":{"autoheal.stop.other_label":"some_value"}}]"#;
+        let input = r#"[{"Id":"582036c7a5e8719bbbc9476e4216bfaf4fd318b61723f41f2e8fe3b60d8182ae","State":"running","Labels":{"autoheal.stop.other_label":"some_value"},"NetworkSettings":{"Networks":{}}}]"#;
 
         let deserialized: Result<Vec<Container>, _> = serde_json::from_slice(input.as_bytes());
 
@@ -227,45 +242,49 @@ mod tests {
 
     #[test]
     fn deserialize_names_empty_names_array() {
-        let input = r#"[{"Id":"582036c7a5e8719bbbc9476e4216bfaf4fd318b61723f41f2e8fe3b60d8182ae","Names":[],"State":"running","Labels":{"autoheal.stop.other_label":"some_value"}}]"#;
+        let input = r#"[{"Id":"582036c7a5e8719bbbc9476e4216bfaf4fd318b61723f41f2e8fe3b60d8182ae","Names":[],"State":"running","Labels":{"autoheal.stop.other_label":"some_value"},"NetworkSettings":{"Networks":{}}}]"#;
 
         let deserialized: Result<Vec<Container>, _> = serde_json::from_slice(input.as_bytes());
 
         assert!(deserialized.is_ok());
 
+        let containers = deserialized.unwrap();
+        assert_eq!(containers.len(), 1);
+
         assert_eq!(
-            &[Container {
-                id: "582036c7a5e8719bbbc9476e4216bfaf4fd318b61723f41f2e8fe3b60d8182ae".into(),
-                names: vec![].into(),
-                state: "running".into(),
-                timeout: None,
-            }][..],
-            deserialized.unwrap()
+            containers[0].id.as_ref(),
+            "582036c7a5e8719bbbc9476e4216bfaf4fd318b61723f41f2e8fe3b60d8182ae"
         );
+        assert_eq!(containers[0].names.len(), 0);
+        assert_eq!(containers[0].state.as_ref(), "running");
+        assert_eq!(containers[0].timeout, None);
     }
 
     #[test]
     fn deserialize_multiple_names_with_and_without_slash() {
-        let input = r#"[{"Id":"582036c7a5e8719bbbc9476e4216bfaf4fd318b61723f41f2e8fe3b60d8182ae","Names":["/photoprism-1","photoprism-2"],"Labels": {}, "State":"running"}]"#;
+        let input = r#"[{"Id":"582036c7a5e8719bbbc9476e4216bfaf4fd318b61723f41f2e8fe3b60d8182ae","Names":["/photoprism-1","photoprism-2"],"Labels":{},"State":"running","NetworkSettings":{"Networks":{}}}]"#;
 
         let deserialized: Result<Vec<Container>, _> = serde_json::from_slice(input.as_bytes());
 
         assert!(deserialized.is_ok());
 
+        let containers = deserialized.unwrap();
+        assert_eq!(containers.len(), 1);
+
         assert_eq!(
-            &[Container {
-                id: "582036c7a5e8719bbbc9476e4216bfaf4fd318b61723f41f2e8fe3b60d8182ae".into(),
-                names: ["photoprism-1".into(), "photoprism-2".into()].into(),
-                state: "running".into(),
-                timeout: None,
-            }][..],
-            deserialized.unwrap()
+            containers[0].id.as_ref(),
+            "582036c7a5e8719bbbc9476e4216bfaf4fd318b61723f41f2e8fe3b60d8182ae"
         );
+        assert_eq!(containers[0].names.len(), 2);
+        assert_eq!(containers[0].names[0].as_ref(), "photoprism-1");
+        assert_eq!(containers[0].names[1].as_ref(), "photoprism-2");
+        assert_eq!(containers[0].state.as_ref(), "running");
+        assert_eq!(containers[0].timeout, None);
     }
 
     #[test]
     fn deserialize_invalid_labels() {
-        let input = r#"[{"Id":"582036c7a5e8719bbbc9476e4216bfaf4fd318b61723f41f2e8fe3b60d8182ae","Names":["/foo"],"State":"running","Labels": "I am not a map, but a string"}]"#;
+        let input = r#"[{"Id":"582036c7a5e8719bbbc9476e4216bfaf4fd318b61723f41f2e8fe3b60d8182ae","Names":["/foo"],"State":"running","Labels":"I am not a map, but a string","NetworkSettings":{"Networks":{}}}]"#;
 
         let deserialized: Result<Vec<Container>, _> = serde_json::from_slice(input.as_bytes());
 
@@ -273,7 +292,7 @@ mod tests {
 
         assert_eq!(
             deserialized.unwrap_err().to_string(),
-            "invalid type: string \"I am not a map, but a string\", expected a nonempty sequence of items at line 1 column 149"
+            "invalid type: string \"I am not a map, but a string\", expected a nonempty sequence of items at line 1 column 148"
         );
     }
 }
