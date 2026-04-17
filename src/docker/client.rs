@@ -34,6 +34,7 @@ use crate::models::events::Event;
 use crate::models::network::{NetworkInspect, NetworkSummary};
 
 pub enum DockerEndpoint {
+    #[cfg(not(windows))]
     Socket(HttpClient<UnixSocketConnector<PathBuf>, Full<Bytes>>),
     Tls(HttpClient<HttpsConnector<HttpConnector>, Full<Bytes>>),
 }
@@ -135,6 +136,7 @@ impl Client {
                     docker_timeout: timeout,
                 }
             },
+            #[cfg(not(windows))]
             ConfigEndpoint::Socket(path_buf) => {
                 // we're connecting over a socket, so the url is localhost
 
@@ -168,6 +170,7 @@ impl Client {
                     Err(error) => Err(error.into()),
                 }
             },
+            #[cfg(not(windows))]
             DockerEndpoint::Socket(ref client) => {
                 let response = execute_request(client, request);
 
