@@ -6,7 +6,7 @@ use thiserror::Error;
 
 /// Error type for endpoint calls.
 #[derive(Debug, Error)]
-pub enum EndpointCallError<TError>
+pub enum ApiEndpointCallError<TError>
 where
     TError: std::fmt::Debug,
 {
@@ -25,7 +25,7 @@ where
 }
 
 /// A typed Docker API endpoint.
-pub trait Endpoint {
+pub trait ApiEndpoint {
     /// Request.
     type Request: ?Sized;
     /// Successful response.

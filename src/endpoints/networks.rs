@@ -1,11 +1,11 @@
 use hyper::Method;
 
-use crate::endpoint::Endpoint;
+use crate::endpoint::ApiEndpoint;
 use crate::models::network::{NetworkInspect, NetworkSummary};
 
 pub struct ListNetworks;
 
-impl Endpoint for ListNetworks {
+impl ApiEndpoint for ListNetworks {
     type Request = ();
     type Response = Vec<NetworkSummary>;
     type Error = serde_json::Value;
@@ -19,7 +19,7 @@ impl Endpoint for ListNetworks {
 
 pub struct InspectNetwork;
 
-impl Endpoint for InspectNetwork {
+impl ApiEndpoint for InspectNetwork {
     type Request = str;
     type Response = NetworkInspect;
     type Error = serde_json::Value;

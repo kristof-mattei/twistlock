@@ -19,8 +19,8 @@ use tokio::time::timeout;
 use tokio_util::sync::CancellationToken;
 use tracing::{Level, event};
 
-use crate::config::{Config, Endpoint as ConfigEndpoint};
-use crate::endpoint::{Endpoint, EndpointCallError};
+use crate::config::Endpoint as ConfigEndpoint;
+use crate::endpoint::{ApiEndpoint, ApiEndpointCallError};
 use crate::endpoints::containers::{
     InspectContainer, ListContainers, RestartContainer, RestartContainerRequest,
 };
@@ -33,7 +33,7 @@ use crate::models::container_inspect::ContainerInspect;
 use crate::models::events::Event;
 use crate::models::network::{NetworkInspect, NetworkSummary};
 
-pub enum DockerEndpoint {
+pub(crate) enum DockerEndpoint {
     #[cfg(not(windows))]
     Socket(HttpClient<UnixSocketConnector<PathBuf>, Full<Bytes>>),
     Tls(HttpClient<HttpsConnector<HttpConnector>, Full<Bytes>>),
@@ -79,9 +79,9 @@ where
 }
 
 pub struct Client {
-    pub endpoint: DockerEndpoint,
-    pub uri: http::Uri,
-    pub docker_timeout: Duration,
+    endpoint: DockerEndpoint,
+    uri: http::Uri,
+    docker_timeout: Duration,
 }
 
 impl Client {
@@ -93,13 +93,13 @@ impl Client {
     /// * `docker_socket_or_uri` is not a valid path or `Uri`
     #[expect(clippy::missing_panics_doc, reason = "Not needed")]
     pub fn build(
-        config: Config,
+        endpoint: ConfigEndpoint,
         cacert: Option<PathBuf>,
         client_key: Option<PathBuf>,
         client_cert: Option<PathBuf>,
         timeout: Duration,
     ) -> Result<Client, eyre::Report> {
-        let daemon = match config.endpoint {
+        let daemon = match endpoint {
             ConfigEndpoint::Direct(url) => {
                 let client_credentials = match (client_cert, client_key) {
                     (Some(client_cert), Some(client_key)) => Some(ClientCredentials {
@@ -183,7 +183,7 @@ impl Client {
         }
     }
 
-    /// Call a typed [`Endpoint`], returning a structured error on failure.
+    /// Call a typed [`ApiEndpoint`], returning a structured error on failure.
     ///
     /// # Errors
     ///
@@ -193,45 +193,45 @@ impl Client {
     /// * Failure to send the request
     /// * Response is not success
     /// * Failed to deserialize the response
-    pub async fn call<E: Endpoint>(
+    pub async fn call<E: ApiEndpoint>(
         &self,
         request: &E::Request,
-    ) -> Result<E::Response, EndpointCallError<E::Error>> {
+    ) -> Result<E::Response, ApiEndpointCallError<E::Error>> {
         let path_and_query = E::path_and_query(request)
-            .map_err(|error| EndpointCallError::Transport(error.into()))?;
+            .map_err(|error| ApiEndpointCallError::Transport(error.into()))?;
 
         let response = self
             .send_request(&path_and_query, E::METHOD)
             .await
-            .map_err(EndpointCallError::Transport)?;
+            .map_err(ApiEndpointCallError::Transport)?;
 
         let status_code = response.status();
 
         let bytes = response
             .collect()
             .await
-            .map_err(|error| EndpointCallError::Transport(error.into()))?
+            .map_err(|error| ApiEndpointCallError::Transport(error.into()))?
             .to_bytes();
 
         if status_code.is_success() {
             E::parse_response(&bytes).map_err(|error| {
                 event!(Level::ERROR, ?error, message = %String::from_utf8_lossy(&bytes), "Failed to deserialize response");
-                EndpointCallError::Transport(error.into())
+                ApiEndpointCallError::Transport(error.into())
             })
         } else {
             if let Ok(typed_err) = serde_json::from_slice::<E::Error>(&bytes) {
-                return Err(EndpointCallError::Typed(typed_err));
+                return Err(ApiEndpointCallError::Typed(typed_err));
             }
 
             if let Ok(generic) = serde_json::from_slice::<serde_json::Value>(&bytes) {
-                return Err(EndpointCallError::Generic(generic));
+                return Err(ApiEndpointCallError::Generic(generic));
             }
 
             let body = String::from_utf8_lossy(&bytes).into_owned();
 
             event!(Level::ERROR, %status_code, message = %body, "Invalid response");
 
-            Err(EndpointCallError::HttpError {
+            Err(ApiEndpointCallError::HttpError {
                 status: status_code,
                 body,
             })
@@ -249,7 +249,7 @@ impl Client {
     pub async fn list_containers(
         &self,
         filters: &Filters,
-    ) -> Result<Vec<Container>, EndpointCallError<<ListContainers as Endpoint>::Error>> {
+    ) -> Result<Vec<Container>, ApiEndpointCallError<<ListContainers as ApiEndpoint>::Error>> {
         self.call::<ListContainers>(filters).await
     }
 
@@ -264,7 +264,8 @@ impl Client {
     pub async fn inspect_container(
         &self,
         id: &str,
-    ) -> Result<ContainerInspect, EndpointCallError<<InspectContainer as Endpoint>::Error>> {
+    ) -> Result<ContainerInspect, ApiEndpointCallError<<InspectContainer as ApiEndpoint>::Error>>
+    {
         self.call::<InspectContainer>(id).await
     }
 
@@ -278,7 +279,8 @@ impl Client {
     /// * Response is not success
     pub async fn list_networks(
         &self,
-    ) -> Result<Vec<NetworkSummary>, EndpointCallError<<ListNetworks as Endpoint>::Error>> {
+    ) -> Result<Vec<NetworkSummary>, ApiEndpointCallError<<ListNetworks as ApiEndpoint>::Error>>
+    {
         self.call::<ListNetworks>(&()).await
     }
 
@@ -293,7 +295,8 @@ impl Client {
     pub async fn inspect_network(
         &self,
         id: &str,
-    ) -> Result<NetworkInspect, EndpointCallError<<InspectContainer as Endpoint>::Error>> {
+    ) -> Result<NetworkInspect, ApiEndpointCallError<<InspectContainer as ApiEndpoint>::Error>>
+    {
         self.call::<InspectNetwork>(id).await
     }
 
@@ -309,7 +312,7 @@ impl Client {
         &self,
         container_id: &str,
         timeout: std::time::Duration,
-    ) -> Result<(), EndpointCallError<<RestartContainer as Endpoint>::Error>> {
+    ) -> Result<(), ApiEndpointCallError<<RestartContainer as ApiEndpoint>::Error>> {
         self.call::<RestartContainer>(&RestartContainerRequest {
             id: container_id.to_owned(),
             timeout,

@@ -3,14 +3,14 @@ use std::time::Duration;
 use hyper::Method;
 
 use crate::client::url_encode;
-use crate::endpoint::Endpoint;
+use crate::endpoint::ApiEndpoint;
 use crate::filters::Filters;
 use crate::models::container::Container;
 use crate::models::container_inspect::ContainerInspect;
 
 pub struct ListContainers;
 
-impl Endpoint for ListContainers {
+impl ApiEndpoint for ListContainers {
     type Request = Filters;
     type Response = Vec<Container>;
     type Error = serde_json::Value;
@@ -24,7 +24,7 @@ impl Endpoint for ListContainers {
 
 pub struct InspectContainer;
 
-impl Endpoint for InspectContainer {
+impl ApiEndpoint for InspectContainer {
     type Request = str;
     type Response = ContainerInspect;
     type Error = serde_json::Value;
@@ -43,7 +43,7 @@ pub struct RestartContainerRequest {
 
 pub struct RestartContainer;
 
-impl Endpoint for RestartContainer {
+impl ApiEndpoint for RestartContainer {
     type Request = RestartContainerRequest;
     type Response = ();
     type Error = serde_json::Value;
