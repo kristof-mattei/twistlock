@@ -1,4 +1,17 @@
 <!-- header goes here -->
+## [0.2.1](https://github.com/kristof-mattei/twistlock/compare/v0.2.0..v0.2.1) - 2026-04-23
+
+### 🐛 Bug Fixes
+
+- *(deps)* `mimalloc` by default now is v3, removing flag by [@kristof-mattei](https://github.com/kristof-mattei) ([`c0fdb8a`](https://github.com/kristof-mattei/twistlock/commit/c0fdb8aa5fae0dd08bcfb2441388bd458dd23a0c))
+- *(deps)* Update rust crate mimalloc to 0.1.50 by [@renovate[bot]](https://github.com/renovate[bot]) ([`f488e9c`](https://github.com/kristof-mattei/twistlock/commit/f488e9c023782304221631029603e77be7779648))
+- Added tests for filters by [@kristof-mattei](https://github.com/kristof-mattei) ([`36ec63f`](https://github.com/kristof-mattei/twistlock/commit/36ec63fbb2df5947d2822dc0b6359cc8cb05ffe8))
+
+### ⚙️ Miscellaneous Tasks
+
+- *(release)* Link in release proposal now points to sha as tag doesn't exist yet by [@kristof-mattei](https://github.com/kristof-mattei) ([`f2bcfc8`](https://github.com/kristof-mattei/twistlock/commit/f2bcfc8ed61488c9863b26533432becd6e7267df))
+- Move to keep track by [@kristof-mattei](https://github.com/kristof-mattei) ([`71c557e`](https://github.com/kristof-mattei/twistlock/commit/71c557e9818e3f3fb4244e1275ac65a94cb60053))
+- Restore by [@kristof-mattei](https://github.com/kristof-mattei) ([`6365114`](https://github.com/kristof-mattei/twistlock/commit/6365114bc6be25a2fff8f66a7859c3d217c2d575))
 ## [0.2.0](https://github.com/kristof-mattei/twistlock/compare/v0.1.2..v0.2.0) - 2026-04-17
 
 ### 🚀 Features
