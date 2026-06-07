@@ -327,7 +327,7 @@ jobs:
           echo "RUST=$(rustc --version)" >> "$GITHUB_ENV"
 
       - name: Upload coverage results (to Codecov.io)
-        uses: codecov/codecov-action@e79a6962e0d4c0c17b229090214935d2e33f8354 # v6.0.1
+        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v6.0.2
         with:
           disable_search: true
           disable_telem: true
@@ -341,7 +341,7 @@ jobs:
           use_oidc: true
 
       - name: Upload test results (to Codecov.io)
-        uses: codecov/codecov-action@e79a6962e0d4c0c17b229090214935d2e33f8354 # v6.0.1
+        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v6.0.2
         with:
           disable_search: true
           disable_telem: true
@@ -449,7 +449,7 @@ jobs:
           Add-Content -Path "$env:GITHUB_ENV" -Value "RUST=$version"
 
       - name: Upload coverage results (to Codecov.io)
-        uses: codecov/codecov-action@e79a6962e0d4c0c17b229090214935d2e33f8354 # v6.0.1
+        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v6.0.2
         with:
           disable_search: true
           disable_telem: true
@@ -463,7 +463,7 @@ jobs:
           use_oidc: true
 
       - name: Upload test results (to Codecov.io)
-        uses: codecov/codecov-action@e79a6962e0d4c0c17b229090214935d2e33f8354 # v6.0.1
+        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v6.0.2
         with:
           disable_search: true
           disable_telem: true
