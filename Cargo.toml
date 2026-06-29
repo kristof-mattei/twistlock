@@ -12,42 +12,42 @@ repository = "https://github.com/kristof-mattei/twistlock"
 include = ["examples/**", "src/**", "tests/**", "/LICENSE", "/LICENSE-*"]
 
 [dependencies]
-color-eyre = "0.6.5"
-hashbrown = { version = "0.17.0", default-features = false, features = [
+color-eyre = "=0.6.5"
+hashbrown = { version = "=0.17.1", default-features = false, features = [
     "default-hasher",
     "equivalent",
     "inline-more",
     "serde",
 ] }
-http = "1.4.0"
-http-body-util = "0.1.3"
-hyper = { version = "1.9.0", default-features = false }
-hyper-rustls = { version = "0.27.9", features = ["http2"] }
-hyper-util = { version = "0.1.20", default-features = false, features = [
+http = "=1.4.2"
+http-body-util = "=0.1.3"
+hyper = { version = "=1.10.1", default-features = false }
+hyper-rustls = { version = "=0.27.9", features = ["http2"] }
+hyper-util = { version = "=0.1.20", default-features = false, features = [
     "client-legacy",
     "http1",
     "http2",
     "tokio",
 ] }
-ipnet = { version = "2.12.0", features = ["serde"] }
-percent-encoding = "2.3.2"
-rustls = "0.23.38"
-rustls-native-certs = "0.8.3"
-serde = { version = "1.0.228", features = ["derive"] }
-serde_json = "1.0.149"
-thiserror = "2.0.18"
-tokio = { version = "1.52.1", features = [
+ipnet = { version = "=2.12.0", features = ["serde"] }
+percent-encoding = "=2.3.2"
+rustls = "=0.23.41"
+rustls-native-certs = "=0.8.4"
+serde = { version = "=1.0.228", features = ["derive"] }
+serde_json = "=1.0.150"
+thiserror = "=2.0.18"
+tokio = { version = "=1.52.3", features = [
     "rt-multi-thread",
     "macros",
     "time",
     "signal",
     "net",
 ] }
-tokio-util = { version = "0.7.18", features = ["rt"] }
-tracing = "0.1.44"
+tokio-util = { version = "=0.7.18", features = ["rt"] }
+tracing = "=0.1.44"
 
 [target.'cfg(not(target_os = "windows"))'.dependencies]
-hyper-unix-socket = "0.6.1"
+hyper-unix-socket = "=0.6.1"
 
 [dev-dependencies]
 pretty_assertions = "=1.4.1"
