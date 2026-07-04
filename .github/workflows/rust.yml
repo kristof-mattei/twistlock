@@ -103,13 +103,13 @@ jobs:
         name: Set up mold
         uses: rui314/setup-mold@9c9c13bf4c3f1adef0cc596abc155580bcb04444 # v1
 
-      - &set_up_toolchain
+      - &set_up_toolchain_windows
         name: Set up toolchain
-        shell: bash
+        shell: pwsh
         run: |
-          rm ${HOME}/.cargo/bin/cargo-fmt
-          rm ${HOME}/.cargo/bin/rust-analyzer
-          rm ${HOME}/.cargo/bin/rustfmt
+          Remove-Item -ErrorAction SilentlyContinue ${HOME}/.cargo/bin/cargo-fmt.exe
+          Remove-Item -ErrorAction SilentlyContinue ${HOME}/.cargo/bin/rust-analyzer.exe
+          Remove-Item -ErrorAction SilentlyContinue ${HOME}/.cargo/bin/rustfmt.exe
 
           rustup self update
           rustup update
@@ -123,7 +123,7 @@ jobs:
         uses: mozilla-actions/sccache-action@9e7fa8a12102821edf02ca5dbea1acd0f89a2696 # v0.0.10
 
       - name: Fetch
-        shell: bash
+        shell: pwsh
         run: |
           cargo fetch --locked
 
@@ -244,20 +244,7 @@ jobs:
 
       - *set_up_mold
 
-      - &set_up_toolchain_windows
-        name: Set up toolchain
-        shell: pwsh
-        run: |
-          Remove-Item -ErrorAction SilentlyContinue ${HOME}/.cargo/bin/cargo-fmt.exe
-          Remove-Item -ErrorAction SilentlyContinue ${HOME}/.cargo/bin/rust-analyzer.exe
-          Remove-Item -ErrorAction SilentlyContinue ${HOME}/.cargo/bin/rustfmt.exe
-
-          rustup self update
-          rustup update
-          rustup show active-toolchain || rustup toolchain install
-          rustup show
-
-          cargo --version
+      - *set_up_toolchain_windows
 
       - *set_up_sccache
 
