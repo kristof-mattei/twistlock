@@ -289,6 +289,7 @@ jobs:
     runs-on: windows-latest
     permissions:
       checks: write
+      contents: read
       id-token: write
       pull-requests: write
     steps:
