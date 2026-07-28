@@ -16,7 +16,6 @@ endfor
 endmacro
 endport
 errorlens
-explicitely
 grcov
 hubot
 hyperv
@@ -43,7 +42,6 @@ rustflags
 samply
 sccache
 skopeo
-specificy
 startport
 startswith
 striptags
