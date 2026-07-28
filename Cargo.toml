@@ -60,6 +60,10 @@ doc-scrape-examples = true
 name = "client"
 required-features = ["tokio/macros"]
 
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
 [lints.clippy]
 # don't stop from compiling / running
 all = "warn"
