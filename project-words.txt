@@ -9,7 +9,6 @@ cocogitto
 Ctarget
 cves
 docsrs
-dont
 dorny
 Dtrue
 endfor
@@ -31,7 +30,6 @@ nextest
 nvmrc
 pathbuf
 photoprism
-pids
 postprocessors
 prereleased
 profraw
