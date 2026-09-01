@@ -58,8 +58,15 @@ fn build_root_cert_store(cacert: Option<PathBuf>) -> Result<RootCertStore, eyre:
             event!(Level::ERROR, ?error, "Failed to load certificate");
         }
 
-        for cert in native_certs.certs {
-            store.add(cert).unwrap();
+        let (added, ignored) = store.add_parsable_certificates(native_certs.certs);
+
+        if ignored > 0 {
+            event!(
+                Level::WARN,
+                added,
+                ignored,
+                "Ignored unparsable certificates from the OS trust store"
+            );
         }
     }
 
