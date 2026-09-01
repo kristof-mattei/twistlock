@@ -33,10 +33,17 @@ use crate::models::container_inspect::ContainerInspect;
 use crate::models::events::Event;
 use crate::models::network::{NetworkInspect, NetworkSummary};
 
+#[derive(Debug)]
 pub(crate) enum DockerEndpoint {
     #[cfg(not(windows))]
     Socket(HttpClient<UnixSocketConnector<PathBuf>, Full<Bytes>>),
     Tls(HttpClient<HttpsConnector<HttpConnector>, Full<Bytes>>),
+}
+
+#[derive(Debug)]
+pub struct ClientCredentialPaths {
+    pub key: PathBuf,
+    pub cert: PathBuf,
 }
 
 struct ClientCredentials {
@@ -87,6 +94,7 @@ where
     Ok(encoded)
 }
 
+#[derive(Debug)]
 pub struct Client {
     endpoint: DockerEndpoint,
     uri: http::Uri,
@@ -104,20 +112,20 @@ impl Client {
     pub fn build(
         endpoint: ConfigEndpoint,
         cacert: Option<PathBuf>,
-        client_key: Option<PathBuf>,
-        client_cert: Option<PathBuf>,
+        client_credentials: Option<ClientCredentialPaths>,
         timeout: Duration,
     ) -> Result<Client, eyre::Report> {
         let daemon = match endpoint {
             ConfigEndpoint::Direct(url) => {
-                let client_credentials = match (client_cert, client_key) {
-                    (Some(client_cert), Some(client_key)) => Some(ClientCredentials {
-                        key: PrivateKeyDer::from_pem_file(client_key)?,
-                        certs: CertificateDer::pem_file_iter(client_cert)?
-                            .collect::<Result<Vec<_>, _>>()?,
-                    }),
-                    _ => None,
-                };
+                let client_credentials = client_credentials
+                    .map(|paths| -> Result<ClientCredentials, eyre::Report> {
+                        Ok(ClientCredentials {
+                            key: PrivateKeyDer::from_pem_file(paths.key)?,
+                            certs: CertificateDer::pem_file_iter(paths.cert)?
+                                .collect::<Result<Vec<_>, _>>()?,
+                        })
+                    })
+                    .transpose()?;
 
                 let root_store = build_root_cert_store(cacert)?;
 
