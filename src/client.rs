@@ -48,7 +48,9 @@ fn build_root_cert_store(cacert: Option<PathBuf>) -> Result<RootCertStore, eyre:
     let mut store = RootCertStore::empty();
 
     if let Some(cacert) = cacert {
-        store.add(CertificateDer::from_pem_file(cacert)?)?;
+        for cert in CertificateDer::pem_file_iter(cacert)? {
+            store.add(cert?)?;
+        }
     } else {
         let native_certs = rustls_native_certs::load_native_certs();
 
@@ -104,7 +106,8 @@ impl Client {
                 let client_credentials = match (client_cert, client_key) {
                     (Some(client_cert), Some(client_key)) => Some(ClientCredentials {
                         key: PrivateKeyDer::from_pem_file(client_key)?,
-                        certs: vec![CertificateDer::from_pem_file(client_cert)?],
+                        certs: CertificateDer::pem_file_iter(client_cert)?
+                            .collect::<Result<Vec<_>, _>>()?,
                     }),
                     _ => None,
                 };
