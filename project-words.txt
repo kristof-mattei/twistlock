@@ -5,6 +5,7 @@ autoheal
 bkeepers
 buildcache
 cinstrument
+cliffignore
 ctarget
 cves
 docsrs
@@ -19,11 +20,9 @@ hubot
 hyperv
 idents
 kristof
-lldb
 mattei
 monomorphization
 multiplatform
-mypy
 netns
 nextest
 pathbuf
@@ -32,6 +31,7 @@ postprocessors
 prereleased
 profraw
 pyflakes
+rawfile
 retag
 retagging
 rhysd
@@ -41,6 +41,7 @@ samply
 sccache
 skopeo
 skopeo's
+slurpfile
 startport
 startswith
 striptags
