@@ -107,7 +107,7 @@ jobs:
 
   cargo-build-windows:
     name: Cargo build Windows
-    runs-on: windows-latest
+    runs-on: windows-2025
     needs:
       - changes
     if: |
@@ -310,7 +310,7 @@ jobs:
 
   cargo-test-and-report-windows:
     name: Cargo test (and report) Windows
-    runs-on: windows-latest
+    runs-on: windows-2025
     permissions:
       checks: write # publish-unit-test-result-action creates a check run
       contents: read
@@ -463,7 +463,7 @@ jobs:
 
   cargo-clippy-and-report-windows:
     name: Cargo clippy (and report) Windows
-    runs-on: windows-latest
+    runs-on: windows-2025
     needs:
       - changes
     if: |
