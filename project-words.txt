@@ -25,6 +25,7 @@ monomorphization
 multiplatform
 netns
 nextest
+oras
 pathbuf
 photoprism
 postprocessors
