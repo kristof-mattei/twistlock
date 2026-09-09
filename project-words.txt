@@ -20,6 +20,7 @@ hubot
 hyperv
 idents
 kristof
+lintian
 mattei
 monomorphization
 multiplatform
