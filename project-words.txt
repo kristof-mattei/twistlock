@@ -1,3 +1,4 @@
+allgreen
 appgroup
 appuser
 artipacked
@@ -16,7 +17,7 @@ endmacro
 endport
 errorlens
 grcov
-hubot
+headgreen
 hyperv
 idents
 kristof
