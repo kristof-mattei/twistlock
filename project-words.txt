@@ -30,6 +30,7 @@ nextest
 oras
 pathbuf
 photoprism
+pkgs
 postprocessors
 prereleased
 profraw
@@ -53,6 +54,7 @@ targetplatformdash
 telem
 tera
 topo
+tostring
 trixie
 trunc
 twistlock
