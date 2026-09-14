@@ -1,9 +1,9 @@
 use std::net::{Ipv4Addr, Ipv6Addr};
-use std::str::FromStr;
 
 use hashbrown::HashMap;
-use serde::de::Error;
-use serde::{Deserialize, Deserializer};
+use serde::Deserialize;
+
+use crate::models::deserializers::{deserialize_empty_as_none, deserialize_null_as_empty};
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "PascalCase")]
@@ -48,20 +48,13 @@ pub struct ContainerNetwork {
         deserialize_with = "deserialize_empty_as_none"
     )]
     pub global_ipv6_address: Option<Ipv6Addr>,
-}
 
-// Docker passes empty strings if value absent
-fn deserialize_empty_as_none<'de, D, T>(deserializer: D) -> Result<Option<T>, D::Error>
-where
-    D: Deserializer<'de>,
-    T: FromStr,
-    T::Err: std::fmt::Display,
-{
-    // both absent and "" are None
-    match Option::<&str>::deserialize(deserializer)? {
-        None | Some("") => Ok(None),
-        Some(s) => T::from_str(s).map(Some).map_err(Error::custom),
-    }
+    #[serde(
+        rename(deserialize = "DNSNames"),
+        default,
+        deserialize_with = "deserialize_null_as_empty"
+    )]
+    pub dns_names: Box<[Box<str>]>,
 }
 
 #[cfg(test)]
@@ -131,5 +124,37 @@ mod tests {
     #[test]
     fn invalid_ipv6_is_error() {
         parse(r#"{"IPAddress":"","GlobalIPv6Address":"not-an-ipv6"}"#).unwrap_err();
+    }
+
+    #[test]
+    fn absent_dns_names_are_empty() {
+        let container_network = parse(r#"{"IPAddress":"","GlobalIPv6Address":""}"#).unwrap();
+
+        assert!(container_network.dns_names.is_empty());
+    }
+
+    #[test]
+    fn null_dns_names_are_empty() {
+        let container_network =
+            parse(r#"{"IPAddress":"","GlobalIPv6Address":"","DNSNames":null}"#).unwrap();
+
+        assert!(container_network.dns_names.is_empty());
+    }
+
+    #[test]
+    fn dns_names_are_kept_in_order() {
+        let container_network = parse(
+            r#"{"IPAddress":"","GlobalIPv6Address":"","DNSNames":["ubuntu","1a2b3c4d5e6f"]}"#,
+        )
+        .unwrap();
+
+        assert_eq!(
+            container_network
+                .dns_names
+                .iter()
+                .map(|dns_name| &**dns_name)
+                .collect::<Vec<_>>(),
+            ["ubuntu", "1a2b3c4d5e6f"]
+        );
     }
 }

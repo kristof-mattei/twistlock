@@ -1,10 +1,11 @@
 use std::fmt;
+use std::net::{Ipv4Addr, Ipv6Addr};
 
 use hashbrown::HashMap;
 use serde::de::{SeqAccess, Visitor};
 use serde::{Deserialize, Deserializer};
 
-use crate::models::container_inspect::ContainerNetworkSettings;
+use crate::models::deserializers::deserialize_empty_as_none;
 
 fn deserialize_names<'de, D>(deserializer: D) -> Result<Box<[Box<str>]>, D::Error>
 where
@@ -53,9 +54,29 @@ pub struct Container {
     pub names: Box<[Box<str>]>,
     pub state: Box<str>,
     pub labels: HashMap<Box<str>, Box<str>>,
-    // The network settings do differ between list all containers and inspect container
-    // but since we only use the common ones, we can reuse the type
-    pub network_settings: ContainerNetworkSettings,
+    pub network_settings: ContainerSummaryNetworkSettings,
+}
+
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "PascalCase")]
+pub struct ContainerSummaryNetworkSettings {
+    pub networks: HashMap<Box<str>, ContainerSummaryNetwork>,
+}
+
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "PascalCase")]
+pub struct ContainerSummaryNetwork {
+    #[serde(
+        rename(deserialize = "IPAddress"),
+        deserialize_with = "deserialize_empty_as_none"
+    )]
+    pub ip_address: Option<Ipv4Addr>,
+
+    #[serde(
+        rename(deserialize = "GlobalIPv6Address"),
+        deserialize_with = "deserialize_empty_as_none"
+    )]
+    pub global_ipv6_address: Option<Ipv6Addr>,
 }
 
 impl Container {
@@ -81,6 +102,8 @@ impl Container {
 
 #[cfg(test)]
 mod tests {
+    use std::net::Ipv4Addr;
+
     use hashbrown::HashMap;
     use pretty_assertions::assert_eq;
 
@@ -247,6 +270,17 @@ mod tests {
         assert_eq!(containers[0].names[1].as_ref(), "photoprism-2");
         assert_eq!(containers[0].state.as_ref(), "running");
         assert_eq!(containers[0].labels, HashMap::new());
+    }
+
+    #[test]
+    fn container_summary_parses_the_network_addresses() {
+        let input = r#"[{"Id":"582036c7a5e8","Names":["/photoprism"],"Labels":{},"State":"running","NetworkSettings":{"Networks":{"some-net":{"IPAddress":"172.19.0.2","GlobalIPv6Address":"","Aliases":null,"DNSNames":null}}}}]"#;
+
+        let containers: Vec<Container> = serde_json::from_slice(input.as_bytes()).unwrap();
+        let network = &containers[0].network_settings.networks["some-net"];
+
+        assert_eq!(network.ip_address, Some(Ipv4Addr::new(172, 19, 0, 2)));
+        assert_eq!(network.global_ipv6_address, None);
     }
 
     #[test]
