@@ -48,6 +48,17 @@ pub struct ContainerNetwork {
         deserialize_with = "deserialize_empty_as_none"
     )]
     pub global_ipv6_address: Option<Ipv6Addr>,
+
+    #[serde(default, deserialize_with = "deserialize_null_as_empty")]
+    pub aliases: Box<[Box<str>]>,
+}
+
+// `/containers/json` passes `null` where `/containers/{id}/json` passes a list
+fn deserialize_null_as_empty<'de, D>(deserializer: D) -> Result<Box<[Box<str>]>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    Ok(Option::<Box<[Box<str>]>>::deserialize(deserializer)?.unwrap_or_default())
 }
 
 // Docker passes empty strings if value absent
@@ -131,5 +142,45 @@ mod tests {
     #[test]
     fn invalid_ipv6_is_error() {
         parse(r#"{"IPAddress":"","GlobalIPv6Address":"not-an-ipv6"}"#).unwrap_err();
+    }
+
+    #[test]
+    fn absent_aliases_are_empty() {
+        let container_network = parse(r#"{"IPAddress":"","GlobalIPv6Address":""}"#).unwrap();
+
+        assert!(container_network.aliases.is_empty());
+    }
+
+    #[test]
+    fn null_aliases_are_empty() {
+        let container_network =
+            parse(r#"{"IPAddress":"","GlobalIPv6Address":"","Aliases":null}"#).unwrap();
+
+        assert!(container_network.aliases.is_empty());
+    }
+
+    #[test]
+    fn empty_aliases_are_empty() {
+        let container_network =
+            parse(r#"{"IPAddress":"","GlobalIPv6Address":"","Aliases":[]}"#).unwrap();
+
+        assert!(container_network.aliases.is_empty());
+    }
+
+    #[test]
+    fn aliases_are_kept_in_order() {
+        let container_network = parse(
+            r#"{"IPAddress":"","GlobalIPv6Address":"","Aliases":["my-alias","other-alias"]}"#,
+        )
+        .unwrap();
+
+        assert_eq!(
+            container_network
+                .aliases
+                .iter()
+                .map(|alias| &**alias)
+                .collect::<Vec<_>>(),
+            ["my-alias", "other-alias"]
+        );
     }
 }
