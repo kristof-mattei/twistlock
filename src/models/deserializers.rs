@@ -18,8 +18,8 @@ where
     T: FromStr,
     T::Err: std::fmt::Display,
 {
-    match Option::<&str>::deserialize(deserializer)? {
-        None | Some("") => Ok(None),
-        Some(s) => T::from_str(s).map(Some).map_err(Error::custom),
+    match <&str>::deserialize(deserializer)? {
+        "" => Ok(None),
+        s => T::from_str(s).map(Some).map_err(Error::custom),
     }
 }
