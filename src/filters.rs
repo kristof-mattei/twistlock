@@ -141,8 +141,8 @@ impl std::fmt::Display for Health {
 // volume=(<volume name> or <mount point destination>)
 // most members support supports `null` and `[]`, but in general we omit them when empty.
 // Notable exception: `is_task`.
-// by default there is an implicit `status=["running"]` filter. If you want to see e.g. `exited=["1"]`
-// you have to manually include a `status=["exited"]`...
+// with no `status` filter the endpoint returns `running`, `paused` and `restarting` containers.
+// If you want to see e.g. `exited=["1"]` you have to manually include a `status=["exited"]`...
 #[derive(Serialize, Default)]
 pub struct Filters {
     #[serde(
