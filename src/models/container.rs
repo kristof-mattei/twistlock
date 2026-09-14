@@ -47,7 +47,7 @@ where
 
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "PascalCase")]
-pub struct Container {
+pub struct ContainerSummary {
     pub id: Box<str>,
     #[serde(deserialize_with = "deserialize_names")]
     #[serde(rename(deserialize = "Names"))]
@@ -79,7 +79,7 @@ pub struct ContainerSummaryNetwork {
     pub global_ipv6_address: Option<Ipv6Addr>,
 }
 
-impl Container {
+impl ContainerSummary {
     #[must_use]
     pub fn get_short_id(&self) -> &str {
         #[expect(
@@ -107,13 +107,14 @@ mod tests {
     use hashbrown::HashMap;
     use pretty_assertions::assert_eq;
 
-    use crate::models::container::Container;
+    use crate::models::container::ContainerSummary;
 
     #[test]
     fn deserialize() {
         let input = r#"[{"Id":"582036c7a5e8719bbbc9476e4216bfaf4fd318b61723f41f2e8fe3b60d8182ae","Names":["/photoprism"],"Labels":{},"State":"running","NetworkSettings":{"Networks":{}}},{"Id":"281ea0c72e2e4a41fd2f81df945da9dfbfbc7ea0fe5e59c3d2a8234552e367cf","Names":["/whoogle-search"],"Labels":{},"State":"running","NetworkSettings":{"Networks":{}}}]"#;
 
-        let deserialized: Result<Vec<Container>, _> = serde_json::from_slice(input.as_bytes());
+        let deserialized: Result<Vec<ContainerSummary>, _> =
+            serde_json::from_slice(input.as_bytes());
 
         assert!(deserialized.is_ok());
 
@@ -143,7 +144,8 @@ mod tests {
     fn deserialize_multiple_names() {
         let input = r#"[{"Id":"582036c7a5e8719bbbc9476e4216bfaf4fd318b61723f41f2e8fe3b60d8182ae","Names":["/photoprism-1","/photoprism-2"],"Labels":{}, "State":"running","NetworkSettings":{"Networks":{}}}]"#;
 
-        let deserialized: Result<Vec<Container>, _> = serde_json::from_slice(input.as_bytes());
+        let deserialized: Result<Vec<ContainerSummary>, _> =
+            serde_json::from_slice(input.as_bytes());
 
         assert!(deserialized.is_ok());
 
@@ -165,7 +167,8 @@ mod tests {
     fn deserialize_timeout() {
         let input = r#"[{"Id":"582036c7a5e8719bbbc9476e4216bfaf4fd318b61723f41f2e8fe3b60d8182ae","Names":["/photoprism"],"State":"running","Labels":{"autoheal.stop.timeout":"12"},"NetworkSettings":{"Networks":{}}}]"#;
 
-        let deserialized: Result<Vec<Container>, _> = serde_json::from_slice(input.as_bytes());
+        let deserialized: Result<Vec<ContainerSummary>, _> =
+            serde_json::from_slice(input.as_bytes());
 
         assert!(deserialized.is_ok());
 
@@ -189,7 +192,8 @@ mod tests {
     fn deserialize_no_labels() {
         let input = r#"[{"Id":"582036c7a5e8719bbbc9476e4216bfaf4fd318b61723f41f2e8fe3b60d8182ae","Names":["/photoprism"],"State":"running","NetworkSettings":{"Networks":{}}}]"#;
 
-        let deserialized: Result<Vec<Container>, _> = serde_json::from_slice(input.as_bytes());
+        let deserialized: Result<Vec<ContainerSummary>, _> =
+            serde_json::from_slice(input.as_bytes());
 
         deserialized.unwrap_err();
     }
@@ -198,7 +202,8 @@ mod tests {
     fn deserialize_missing_timeout() {
         let input = r#"[{"Id":"582036c7a5e8719bbbc9476e4216bfaf4fd318b61723f41f2e8fe3b60d8182ae","Names":["/photoprism"],"State":"running","Labels":{"autoheal.stop.other_label":"some_value"},"NetworkSettings":{"Networks":{}}}]"#;
 
-        let deserialized: Result<Vec<Container>, _> = serde_json::from_slice(input.as_bytes());
+        let deserialized: Result<Vec<ContainerSummary>, _> =
+            serde_json::from_slice(input.as_bytes());
 
         assert!(deserialized.is_ok());
 
@@ -222,7 +227,8 @@ mod tests {
     fn deserialize_with_no_names_array() {
         let input = r#"[{"Id":"582036c7a5e8719bbbc9476e4216bfaf4fd318b61723f41f2e8fe3b60d8182ae","State":"running","Labels":{"autoheal.stop.other_label":"some_value"},"NetworkSettings":{"Networks":{}}}]"#;
 
-        let deserialized: Result<Vec<Container>, _> = serde_json::from_slice(input.as_bytes());
+        let deserialized: Result<Vec<ContainerSummary>, _> =
+            serde_json::from_slice(input.as_bytes());
 
         deserialized.unwrap_err();
     }
@@ -231,7 +237,8 @@ mod tests {
     fn deserialize_names_empty_names_array() {
         let input = r#"[{"Id":"582036c7a5e8719bbbc9476e4216bfaf4fd318b61723f41f2e8fe3b60d8182ae","Names":[],"State":"running","Labels":{"autoheal.stop.other_label":"some_value"},"NetworkSettings":{"Networks":{}}}]"#;
 
-        let deserialized: Result<Vec<Container>, _> = serde_json::from_slice(input.as_bytes());
+        let deserialized: Result<Vec<ContainerSummary>, _> =
+            serde_json::from_slice(input.as_bytes());
 
         assert!(deserialized.is_ok());
 
@@ -254,7 +261,8 @@ mod tests {
     fn deserialize_multiple_names_with_and_without_slash() {
         let input = r#"[{"Id":"582036c7a5e8719bbbc9476e4216bfaf4fd318b61723f41f2e8fe3b60d8182ae","Names":["/photoprism-1","photoprism-2"],"Labels":{},"State":"running","NetworkSettings":{"Networks":{}}}]"#;
 
-        let deserialized: Result<Vec<Container>, _> = serde_json::from_slice(input.as_bytes());
+        let deserialized: Result<Vec<ContainerSummary>, _> =
+            serde_json::from_slice(input.as_bytes());
 
         assert!(deserialized.is_ok());
 
@@ -276,7 +284,7 @@ mod tests {
     fn container_summary_parses_the_network_addresses() {
         let input = r#"[{"Id":"582036c7a5e8","Names":["/photoprism"],"Labels":{},"State":"running","NetworkSettings":{"Networks":{"some-net":{"IPAddress":"172.19.0.2","GlobalIPv6Address":"","Aliases":null,"DNSNames":null}}}}]"#;
 
-        let containers: Vec<Container> = serde_json::from_slice(input.as_bytes()).unwrap();
+        let containers: Vec<ContainerSummary> = serde_json::from_slice(input.as_bytes()).unwrap();
         let network = &containers[0].network_settings.networks["some-net"];
 
         assert_eq!(network.ip_address, Some(Ipv4Addr::new(172, 19, 0, 2)));
@@ -287,7 +295,8 @@ mod tests {
     fn deserialize_invalid_labels() {
         let input = r#"[{"Id":"582036c7a5e8719bbbc9476e4216bfaf4fd318b61723f41f2e8fe3b60d8182ae","Names":["/foo"],"State":"running","Labels":"I am not a map, but a string","NetworkSettings":{"Networks":{}}}]"#;
 
-        let deserialized: Result<Vec<Container>, _> = serde_json::from_slice(input.as_bytes());
+        let deserialized: Result<Vec<ContainerSummary>, _> =
+            serde_json::from_slice(input.as_bytes());
 
         assert!(deserialized.is_err());
 
