@@ -1,4 +1,9 @@
 <!-- header goes here -->
+## [0.3.1](https://github.com/kristof-mattei/twistlock/compare/v0.3.0..v0.3.1) - 2026-09-14
+
+### 📚 Documentation
+
+- *(filters)* The default container list includes paused and restarting by [@kristof-mattei](https://github.com/kristof-mattei) ([`bcc4b11`](https://github.com/kristof-mattei/twistlock/commit/bcc4b112ee2ddf44753fab65b32d984110cdf4cf))
 ## [0.3.0](https://github.com/kristof-mattei/twistlock/compare/v0.2.1..v0.3.0) - 2026-09-03
 
 ### 🐛 Bug Fixes
