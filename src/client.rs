@@ -28,7 +28,7 @@ use crate::endpoints::networks::{InspectNetwork, ListNetworks};
 use crate::filters::Filters;
 use crate::http_client;
 use crate::http_client::{build_request, execute_request};
-use crate::models::container::Container;
+use crate::models::container::ContainerSummary;
 use crate::models::container_inspect::ContainerInspect;
 use crate::models::events::Event;
 use crate::models::network::{NetworkInspect, NetworkSummary};
@@ -267,7 +267,8 @@ impl Client {
     pub async fn list_containers(
         &self,
         filters: &Filters,
-    ) -> Result<Vec<Container>, ApiEndpointCallError<<ListContainers as ApiEndpoint>::Error>> {
+    ) -> Result<Vec<ContainerSummary>, ApiEndpointCallError<<ListContainers as ApiEndpoint>::Error>>
+    {
         self.call::<ListContainers>(filters).await
     }
 

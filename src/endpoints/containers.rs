@@ -5,14 +5,14 @@ use hyper::Method;
 use crate::client::url_encode;
 use crate::endpoint::ApiEndpoint;
 use crate::filters::Filters;
-use crate::models::container::Container;
+use crate::models::container::ContainerSummary;
 use crate::models::container_inspect::ContainerInspect;
 
 pub struct ListContainers;
 
 impl ApiEndpoint for ListContainers {
     type Request = Filters;
-    type Response = Vec<Container>;
+    type Response = Vec<ContainerSummary>;
     type Error = serde_json::Value;
 
     const METHOD: Method = Method::GET;
