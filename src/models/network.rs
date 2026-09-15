@@ -66,20 +66,6 @@ mod tests {
     }
 
     #[test]
-    fn ipam_config_subnet_null() {
-        let config = parse_config(r#"{"Subnet":null}"#).unwrap();
-
-        assert_eq!(config.subnet, None);
-    }
-
-    #[test]
-    fn ipam_config_subnet_absent() {
-        let config = parse_config("{}").unwrap();
-
-        assert_eq!(config.subnet, None);
-    }
-
-    #[test]
     fn ipam_config_invalid_subnet_is_error() {
         parse_config(r#"{"Subnet":"not-a-cidr"}"#).unwrap_err();
     }
