@@ -1,4 +1,17 @@
 <!-- header goes here -->
+## [0.4.0](https://github.com/kristof-mattei/twistlock/compare/v0.3.1..v0.4.0) - 2026-09-15
+
+### 🚀 Features
+
+- *(models)* Expose `DNSNames` on container networks by [@kristof-mattei](https://github.com/kristof-mattei) ([`59537fe`](https://github.com/kristof-mattei/twistlock/commit/59537fee1238e1c03dac950e7debf8cf0b42536b))
+
+### 🚜 Refactor
+
+- *(models)* [**breaking**] Rename `Container` to `ContainerSummary` by [@kristof-mattei](https://github.com/kristof-mattei) ([`647e8d5`](https://github.com/kristof-mattei/twistlock/commit/647e8d563278222d5098aec8ffaebb0b572f4dc5))
+
+### 🧪 Testing
+
+- *(models)* Drop the subnet null and absent tests, they test serde by [@kristof-mattei](https://github.com/kristof-mattei) ([`bb775b7`](https://github.com/kristof-mattei/twistlock/commit/bb775b7e6a994b2ce7193eed4fc3e24421dbe8e2))
 ## [0.3.1](https://github.com/kristof-mattei/twistlock/compare/v0.3.0..v0.3.1) - 2026-09-14
 
 ### 📚 Documentation
