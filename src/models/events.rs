@@ -5,18 +5,21 @@ use serde_json::{Map, Value as JsonValue};
 
 #[derive(Debug)]
 pub enum Event {
-    Builder(EventBody),
-    Config(EventBody),
-    Container(EventBody),
-    Daemon(EventBody),
-    Image(EventBody),
-    Network(EventBody),
-    Node(EventBody),
-    Plugin(EventBody),
-    Secret(EventBody),
-    Service(EventBody),
-    Volume(EventBody),
-    Unknown { kind: Box<str>, body: EventBody },
+    Builder(EventBody<Box<str>>),
+    Config(EventBody<Box<str>>),
+    Container(EventBody<ContainerId>),
+    Daemon(EventBody<Box<str>>),
+    Image(EventBody<Box<str>>),
+    Network(EventBody<NetworkId>),
+    Node(EventBody<Box<str>>),
+    Plugin(EventBody<Box<str>>),
+    Secret(EventBody<Box<str>>),
+    Service(EventBody<Box<str>>),
+    Volume(EventBody<Box<str>>),
+    Unknown {
+        kind: Box<str>,
+        body: EventBody<Box<str>>,
+    },
 }
 
 impl<'de> Deserialize<'de> for Event {
@@ -32,23 +35,31 @@ impl<'de> Deserialize<'de> for Event {
             None => return Err(D::Error::missing_field("Type")),
         };
 
-        let body = EventBody::deserialize(JsonValue::Object(fields)).map_err(D::Error::custom)?;
+        let fields = JsonValue::Object(fields);
 
         let event = match kind.as_str() {
-            "builder" => Event::Builder(body),
-            "config" => Event::Config(body),
-            "container" => Event::Container(body),
-            "daemon" => Event::Daemon(body),
-            "image" => Event::Image(body),
-            "network" => Event::Network(body),
-            "node" => Event::Node(body),
-            "plugin" => Event::Plugin(body),
-            "secret" => Event::Secret(body),
-            "service" => Event::Service(body),
-            "volume" => Event::Volume(body),
-            kind => Event::Unknown {
-                kind: kind.into(),
-                body,
+            "container" => {
+                Event::Container(EventBody::deserialize(fields).map_err(D::Error::custom)?)
+            },
+            "network" => Event::Network(EventBody::deserialize(fields).map_err(D::Error::custom)?),
+            kind => {
+                let body = EventBody::deserialize(fields).map_err(D::Error::custom)?;
+
+                match kind {
+                    "builder" => Event::Builder(body),
+                    "config" => Event::Config(body),
+                    "daemon" => Event::Daemon(body),
+                    "image" => Event::Image(body),
+                    "node" => Event::Node(body),
+                    "plugin" => Event::Plugin(body),
+                    "secret" => Event::Secret(body),
+                    "service" => Event::Service(body),
+                    "volume" => Event::Volume(body),
+                    kind => Event::Unknown {
+                        kind: kind.into(),
+                        body,
+                    },
+                }
             },
         };
 
@@ -57,11 +68,11 @@ impl<'de> Deserialize<'de> for Event {
 }
 
 #[derive(Deserialize, Debug)]
-pub struct EventBody {
+pub struct EventBody<Id> {
     #[serde(rename(deserialize = "Action"))]
     pub action: Box<str>,
     #[serde(rename(deserialize = "Actor"))]
-    pub actor: EventActor,
+    pub actor: EventActor<Id>,
     pub scope: EventScope,
     pub time: u64,
     #[serde(rename(deserialize = "timeNano"))]
@@ -69,9 +80,9 @@ pub struct EventBody {
 }
 
 #[derive(Deserialize, Debug)]
-pub struct EventActor {
+pub struct EventActor<Id> {
     #[serde(rename(deserialize = "ID"))]
-    pub id: Box<str>,
+    pub id: Id,
     #[serde(rename(deserialize = "Attributes"))]
     pub attributes: HashMap<Box<str>, Box<str>>,
 }
@@ -84,11 +95,57 @@ pub enum EventScope {
     Swarm,
 }
 
+fn short(id: &str) -> &str {
+    id.get(..12).unwrap_or(id)
+}
+
+#[derive(Deserialize, Debug)]
+pub struct ContainerId(Box<str>);
+
+impl ContainerId {
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+
+    #[must_use]
+    pub fn as_short(&self) -> &str {
+        short(&self.0)
+    }
+}
+
+impl std::fmt::Display for ContainerId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+#[derive(Deserialize, Debug)]
+pub struct NetworkId(Box<str>);
+
+impl NetworkId {
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+
+    #[must_use]
+    pub fn as_short(&self) -> &str {
+        short(&self.0)
+    }
+}
+
+impl std::fmt::Display for NetworkId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use pretty_assertions::assert_eq;
 
-    use crate::models::events::Event;
+    use crate::models::events::{ContainerId, Event, NetworkId};
 
     fn parse(json: &str) -> Result<Event, serde_json::Error> {
         serde_json::from_str(json)
@@ -118,6 +175,28 @@ mod tests {
 
         assert_eq!(&*kind, "sandwich");
         assert_eq!(&*body.action, "toast");
+    }
+
+    #[test]
+    fn container_id_reaches_the_container_variant() {
+        let Event::Container(body) = parse(&event("container", "start")).unwrap() else {
+            panic!("not a container event");
+        };
+
+        assert_eq!(body.actor.id.as_str(), "0f9fc026ac74");
+    }
+
+    #[test]
+    fn as_short_truncates_to_twelve() {
+        let id =
+            ContainerId("0f9fc026ac7481ed0d6fc51f34cf7db5d821a3942cf719cbeef5925f853ab8e8".into());
+
+        assert_eq!(id.as_short(), "0f9fc026ac74");
+    }
+
+    #[test]
+    fn as_short_passes_shorter_id_through() {
+        assert_eq!(NetworkId("abc".into()).as_short(), "abc");
     }
 
     #[test]
