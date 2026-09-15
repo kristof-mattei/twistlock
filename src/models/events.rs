@@ -5,9 +5,18 @@ use serde_json::{Map, Value as JsonValue};
 
 #[derive(Debug)]
 pub enum Event {
-    Container(ContainerEvent),
-    Network(NetworkEvent),
-    Other { kind: Box<str>, action: Box<str> },
+    Builder(EventBody),
+    Config(EventBody),
+    Container(EventBody),
+    Daemon(EventBody),
+    Image(EventBody),
+    Network(EventBody),
+    Node(EventBody),
+    Plugin(EventBody),
+    Secret(EventBody),
+    Service(EventBody),
+    Volume(EventBody),
+    Unknown { kind: Box<str>, body: EventBody },
 }
 
 impl<'de> Deserialize<'de> for Event {
@@ -23,24 +32,23 @@ impl<'de> Deserialize<'de> for Event {
             None => return Err(D::Error::missing_field("Type")),
         };
 
-        let event = match kind.as_str() {
-            "container" => ContainerEvent::deserialize(JsonValue::Object(fields))
-                .map(Event::Container)
-                .map_err(D::Error::custom)?,
-            "network" => NetworkEvent::deserialize(JsonValue::Object(fields))
-                .map(Event::Network)
-                .map_err(D::Error::custom)?,
-            _ => {
-                let action = match fields.remove("Action") {
-                    Some(JsonValue::String(action)) => action,
-                    Some(_) => return Err(D::Error::custom("`Action` is not a string")),
-                    None => return Err(D::Error::missing_field("Action")),
-                };
+        let body = EventBody::deserialize(JsonValue::Object(fields)).map_err(D::Error::custom)?;
 
-                Event::Other {
-                    kind: kind.into(),
-                    action: action.into(),
-                }
+        let event = match kind.as_str() {
+            "builder" => Event::Builder(body),
+            "config" => Event::Config(body),
+            "container" => Event::Container(body),
+            "daemon" => Event::Daemon(body),
+            "image" => Event::Image(body),
+            "network" => Event::Network(body),
+            "node" => Event::Node(body),
+            "plugin" => Event::Plugin(body),
+            "secret" => Event::Secret(body),
+            "service" => Event::Service(body),
+            "volume" => Event::Volume(body),
+            kind => Event::Unknown {
+                kind: kind.into(),
+                body,
             },
         };
 
@@ -49,19 +57,7 @@ impl<'de> Deserialize<'de> for Event {
 }
 
 #[derive(Deserialize, Debug)]
-pub struct ContainerEvent {
-    #[serde(rename(deserialize = "Action"))]
-    pub action: Box<str>,
-    #[serde(rename(deserialize = "Actor"))]
-    pub actor: EventActor,
-    pub scope: EventScope,
-    pub time: u64,
-    #[serde(rename(deserialize = "timeNano"))]
-    pub time_nano: u64,
-}
-
-#[derive(Deserialize, Debug)]
-pub struct NetworkEvent {
+pub struct EventBody {
     #[serde(rename(deserialize = "Action"))]
     pub action: Box<str>,
     #[serde(rename(deserialize = "Actor"))]
@@ -106,33 +102,22 @@ mod tests {
     }
 
     #[test]
-    fn container_type_selects_container_variant() {
-        let Event::Container(container) = parse(&event("container", "start")).unwrap() else {
-            panic!("not a container event");
+    fn documented_type_selects_its_variant() {
+        let Event::Volume(body) = parse(&event("volume", "create")).unwrap() else {
+            panic!("not a volume event");
         };
 
-        assert_eq!(&*container.action, "start");
-        assert_eq!(&*container.actor.id, "0f9fc026ac74");
+        assert_eq!(&*body.action, "create");
     }
 
     #[test]
-    fn network_type_selects_network_variant() {
-        let Event::Network(network) = parse(&event("network", "connect")).unwrap() else {
-            panic!("not a network event");
+    fn undocumented_type_keeps_its_kind() {
+        let Event::Unknown { kind, body } = parse(&event("sandwich", "toast")).unwrap() else {
+            panic!("not an unknown event");
         };
 
-        assert_eq!(&*network.action, "connect");
-        assert_eq!(&*network.actor.id, "0f9fc026ac74");
-    }
-
-    #[test]
-    fn unhandled_type_keeps_kind_and_action() {
-        let Event::Other { kind, action } = parse(&event("volume", "create")).unwrap() else {
-            panic!("not an other event");
-        };
-
-        assert_eq!(&*kind, "volume");
-        assert_eq!(&*action, "create");
+        assert_eq!(&*kind, "sandwich");
+        assert_eq!(&*body.action, "toast");
     }
 
     #[test]
@@ -147,19 +132,5 @@ mod tests {
         let error = parse(r#"{"Type":7,"Action":"start"}"#).unwrap_err();
 
         assert_eq!(error.to_string(), "`Type` is not a string");
-    }
-
-    #[test]
-    fn missing_action_on_unhandled_type_is_error() {
-        let error = parse(r#"{"Type":"volume"}"#).unwrap_err();
-
-        assert_eq!(error.to_string(), "missing field `Action`");
-    }
-
-    #[test]
-    fn non_string_action_on_unhandled_type_is_error() {
-        let error = parse(r#"{"Type":"volume","Action":7}"#).unwrap_err();
-
-        assert_eq!(error.to_string(), "`Action` is not a string");
     }
 }
