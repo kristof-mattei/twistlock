@@ -1,29 +1,34 @@
 use hashbrown::HashMap;
 use serde::Deserialize;
 
+use crate::models::id::{ContainerId, NetworkId};
+
 #[derive(Deserialize, Debug)]
 #[serde(from = "RawEvent")]
 pub enum Event {
-    Builder(EventBody),
-    Config(EventBody),
-    Container(EventBody),
-    Daemon(EventBody),
-    Image(EventBody),
-    Network(EventBody),
-    Node(EventBody),
-    Plugin(EventBody),
-    Secret(EventBody),
-    Service(EventBody),
-    Volume(EventBody),
-    Unknown { kind: Box<str>, body: EventBody },
+    Builder(EventBody<Box<str>>),
+    Config(EventBody<Box<str>>),
+    Container(EventBody<ContainerId>),
+    Daemon(EventBody<Box<str>>),
+    Image(EventBody<Box<str>>),
+    Network(EventBody<NetworkId>),
+    Node(EventBody<Box<str>>),
+    Plugin(EventBody<Box<str>>),
+    Secret(EventBody<Box<str>>),
+    Service(EventBody<Box<str>>),
+    Volume(EventBody<Box<str>>),
+    Unknown {
+        kind: Box<str>,
+        body: EventBody<Box<str>>,
+    },
 }
 
 #[derive(Deserialize, Debug)]
-pub struct EventBody {
+pub struct EventBody<Id> {
     #[serde(rename(deserialize = "Action"))]
     pub action: Box<str>,
     #[serde(rename(deserialize = "Actor"))]
-    pub actor: EventActor,
+    pub actor: EventActor<Id>,
     pub scope: EventScope,
     pub time: u64,
     #[serde(rename(deserialize = "timeNano"))]
@@ -31,9 +36,9 @@ pub struct EventBody {
 }
 
 #[derive(Deserialize, Debug)]
-pub struct EventActor {
+pub struct EventActor<Id> {
     #[serde(rename(deserialize = "ID"))]
-    pub id: Box<str>,
+    pub id: Id,
     #[serde(rename(deserialize = "Attributes"))]
     pub attributes: HashMap<Box<str>, Box<str>>,
 }
@@ -51,7 +56,22 @@ struct RawEvent {
     #[serde(rename(deserialize = "Type"))]
     kind: Box<str>,
     #[serde(flatten)]
-    body: EventBody,
+    body: EventBody<Box<str>>,
+}
+
+impl EventBody<Box<str>> {
+    fn with_id<Id>(self, wrap: fn(Box<str>) -> Id) -> EventBody<Id> {
+        EventBody {
+            action: self.action,
+            actor: EventActor {
+                id: wrap(self.actor.id),
+                attributes: self.actor.attributes,
+            },
+            scope: self.scope,
+            time: self.time,
+            time_nano: self.time_nano,
+        }
+    }
 }
 
 impl From<RawEvent> for Event {
@@ -59,10 +79,10 @@ impl From<RawEvent> for Event {
         match &*kind {
             "builder" => Event::Builder(body),
             "config" => Event::Config(body),
-            "container" => Event::Container(body),
+            "container" => Event::Container(body.with_id(ContainerId::new)),
             "daemon" => Event::Daemon(body),
             "image" => Event::Image(body),
-            "network" => Event::Network(body),
+            "network" => Event::Network(body.with_id(NetworkId::new)),
             "node" => Event::Node(body),
             "plugin" => Event::Plugin(body),
             "secret" => Event::Secret(body),
@@ -107,5 +127,14 @@ mod tests {
 
         assert_eq!(&*kind, "sandwich");
         assert_eq!(&*body.action, "toast");
+    }
+
+    #[test]
+    fn container_id_reaches_the_container_variant() {
+        let Event::Container(body) = parse(&event("container", "start")).unwrap() else {
+            panic!("not a container event");
+        };
+
+        assert_eq!(body.actor.id.as_str(), "0f9fc026ac74");
     }
 }

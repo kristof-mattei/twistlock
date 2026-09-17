@@ -4,12 +4,13 @@ use hashbrown::HashMap;
 use serde::Deserialize;
 
 use crate::models::deserializers::{deserialize_empty_as_none, deserialize_null_as_empty};
+use crate::models::id::ContainerId;
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 pub struct ContainerInspect {
     pub name: Box<str>,
-    pub id: Box<str>,
+    pub id: ContainerId,
     pub config: ContainerConfig,
     pub state: ContainerState,
     pub network_settings: ContainerNetworkSettings,

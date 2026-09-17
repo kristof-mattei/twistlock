@@ -1,6 +1,8 @@
 use ipnet::IpNet;
 use serde::{Deserialize, Deserializer};
 
+use crate::models::id::NetworkId;
+
 fn null_as_empty_vec<'de, D, T>(deserializer: D) -> Result<Vec<T>, D::Error>
 where
     D: Deserializer<'de>,
@@ -12,7 +14,7 @@ where
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 pub struct NetworkInspect {
-    pub id: Box<str>,
+    pub id: NetworkId,
     pub name: Box<str>,
     #[serde(rename = "IPAM")]
     pub ipam: NetworkIpam,
@@ -34,7 +36,7 @@ pub struct NetworkIpamConfig {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 pub struct NetworkSummary {
-    pub id: Box<str>,
+    pub id: NetworkId,
 }
 
 #[cfg(test)]
@@ -88,7 +90,7 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(inspect.id.as_ref(), "abc123");
+        assert_eq!(inspect.id.as_str(), "abc123");
         assert_eq!(inspect.name.as_ref(), "my-network");
         assert_eq!(inspect.ipam.config.len(), 2);
         assert_eq!(
@@ -137,7 +139,7 @@ mod tests {
 
         assert_eq!(inspect.name.as_ref(), "none");
         assert_eq!(
-            inspect.id.as_ref(),
+            inspect.id.as_str(),
             "789b90d02ff7f8705ae644eb3d3aa0a9ca5b3b1acb5cf2a8b2f4343072359026"
         );
         assert_eq!(inspect.ipam.config.len(), 0);
