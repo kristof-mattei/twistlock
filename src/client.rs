@@ -214,7 +214,7 @@ impl Client {
     /// * Failed to deserialize the response
     pub async fn call<E: ApiEndpoint>(
         &self,
-        request: &E::Request,
+        request: &E::Request<'_>,
     ) -> Result<E::Response, ApiEndpointCallError<E::Error>> {
         let path_and_query = E::path_and_query(request)
             .map_err(|error| ApiEndpointCallError::Transport(error.into()))?;
@@ -286,8 +286,7 @@ impl Client {
         container: C,
     ) -> Result<ContainerInspect, ApiEndpointCallError<<InspectContainer as ApiEndpoint>::Error>>
     {
-        self.call::<InspectContainer>(container.into().as_str())
-            .await
+        self.call::<InspectContainer>(&container.into()).await
     }
 
     /// Get all networks.
@@ -318,7 +317,7 @@ impl Client {
         network: N,
     ) -> Result<NetworkInspect, ApiEndpointCallError<<InspectContainer as ApiEndpoint>::Error>>
     {
-        self.call::<InspectNetwork>(network.into().as_str()).await
+        self.call::<InspectNetwork>(&network.into()).await
     }
 
     /// Restart a container.
@@ -335,7 +334,7 @@ impl Client {
         timeout: std::time::Duration,
     ) -> Result<(), ApiEndpointCallError<<RestartContainer as ApiEndpoint>::Error>> {
         self.call::<RestartContainer>(&RestartContainerRequest {
-            id: container.into().as_str().to_owned(),
+            container: container.into(),
             timeout,
         })
         .await
