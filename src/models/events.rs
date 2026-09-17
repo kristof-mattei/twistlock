@@ -50,7 +50,6 @@ pub struct EventBody<Id> {
     pub action: Box<str>,
     #[serde(rename(deserialize = "Actor"))]
     pub actor: EventActor<Id>,
-    pub scope: EventScope,
     pub time: u64,
     #[serde(rename(deserialize = "timeNano"))]
     pub time_nano: u64,
@@ -62,14 +61,6 @@ pub struct EventActor<Id> {
     pub id: Id,
     #[serde(rename(deserialize = "Attributes"))]
     pub attributes: HashMap<Box<str>, Box<str>>,
-}
-
-#[derive(Deserialize, Debug)]
-pub enum EventScope {
-    #[serde(rename(deserialize = "local"))]
-    Local,
-    #[serde(rename(deserialize = "swarm"))]
-    Swarm,
 }
 
 #[derive(Deserialize)]
@@ -88,7 +79,6 @@ impl EventBody<Box<str>> {
                 id: wrap(self.actor.id),
                 attributes: self.actor.attributes,
             },
-            scope: self.scope,
             time: self.time,
             time_nano: self.time_nano,
         }
