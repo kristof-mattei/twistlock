@@ -315,8 +315,7 @@ impl Client {
     pub async fn inspect_network<'r, N: Into<NetworkRef<'r>>>(
         &self,
         network: N,
-    ) -> Result<NetworkInspect, ApiEndpointCallError<<InspectContainer as ApiEndpoint>::Error>>
-    {
+    ) -> Result<NetworkInspect, ApiEndpointCallError<<InspectNetwork as ApiEndpoint>::Error>> {
         self.call::<InspectNetwork>(&network.into()).await
     }
 
