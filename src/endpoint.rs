@@ -27,7 +27,7 @@ where
 /// A typed Docker API endpoint.
 pub trait ApiEndpoint {
     /// Request.
-    type Request: ?Sized;
+    type Request<'r>: ?Sized;
     /// Successful response.
     type Response: DeserializeOwned;
     /// Error response.
@@ -41,7 +41,7 @@ pub trait ApiEndpoint {
     /// # Errors
     ///
     /// Returns an error if request parameters cannot be serialized.
-    fn path_and_query(request: &Self::Request) -> Result<String, std::io::Error>;
+    fn path_and_query(request: &Self::Request<'_>) -> Result<String, std::io::Error>;
 
     /// Parse the response body into the response type.
     ///

@@ -7,17 +7,18 @@ use crate::endpoint::ApiEndpoint;
 use crate::filters::Filters;
 use crate::models::container::ContainerSummary;
 use crate::models::container_inspect::ContainerInspect;
+use crate::models::id::ContainerRef;
 
 pub struct ListContainers;
 
 impl ApiEndpoint for ListContainers {
-    type Request = Filters;
+    type Request<'r> = Filters;
     type Response = Vec<ContainerSummary>;
     type Error = serde_json::Value;
 
     const METHOD: Method = Method::GET;
 
-    fn path_and_query(request: &Self::Request) -> Result<String, std::io::Error> {
+    fn path_and_query(request: &Self::Request<'_>) -> Result<String, std::io::Error> {
         Ok(format!("/containers/json?filters={}", url_encode(request)?))
     }
 }
@@ -25,35 +26,35 @@ impl ApiEndpoint for ListContainers {
 pub struct InspectContainer;
 
 impl ApiEndpoint for InspectContainer {
-    type Request = str;
+    type Request<'r> = ContainerRef<'r>;
     type Response = ContainerInspect;
     type Error = serde_json::Value;
 
     const METHOD: Method = Method::GET;
 
-    fn path_and_query(request: &Self::Request) -> Result<String, std::io::Error> {
-        Ok(format!("/containers/{}/json", request))
+    fn path_and_query(request: &Self::Request<'_>) -> Result<String, std::io::Error> {
+        Ok(format!("/containers/{}/json", request.as_str()))
     }
 }
 
-pub struct RestartContainerRequest {
-    pub id: String,
+pub struct RestartContainerRequest<'r> {
+    pub container: ContainerRef<'r>,
     pub timeout: Duration,
 }
 
 pub struct RestartContainer;
 
 impl ApiEndpoint for RestartContainer {
-    type Request = RestartContainerRequest;
+    type Request<'r> = RestartContainerRequest<'r>;
     type Response = ();
     type Error = serde_json::Value;
 
     const METHOD: Method = Method::POST;
 
-    fn path_and_query(request: &Self::Request) -> Result<String, std::io::Error> {
+    fn path_and_query(request: &Self::Request<'_>) -> Result<String, std::io::Error> {
         Ok(format!(
             "/containers/{}/restart?t={}",
-            request.id,
+            request.container.as_str(),
             request.timeout.as_secs()
         ))
     }
@@ -65,11 +66,49 @@ impl ApiEndpoint for RestartContainer {
 
 #[cfg(test)]
 mod tests {
+    use std::time::Duration;
+
     use hashbrown::{HashMap, HashSet};
     use pretty_assertions::assert_eq;
 
     use crate::client::url_encode;
+    use crate::endpoint::ApiEndpoint as _;
+    use crate::endpoints::containers::{
+        InspectContainer, RestartContainer, RestartContainerRequest,
+    };
     use crate::filters::{Filters, Health};
+    use crate::models::id::{ContainerId, ContainerRef};
+
+    #[test]
+    fn inspect_container_path_from_id() {
+        let id = ContainerId::new("0f9fc026ac74");
+
+        assert_eq!(
+            InspectContainer::path_and_query(&ContainerRef::Id(&id)).unwrap(),
+            "/containers/0f9fc026ac74/json"
+        );
+    }
+
+    #[test]
+    fn inspect_container_path_from_name() {
+        assert_eq!(
+            InspectContainer::path_and_query(&ContainerRef::IdOrName("photoprism")).unwrap(),
+            "/containers/photoprism/json"
+        );
+    }
+
+    #[test]
+    fn restart_container_path_carries_the_timeout() {
+        let request = RestartContainerRequest {
+            container: ContainerRef::IdOrName("photoprism"),
+            timeout: Duration::from_secs(12),
+        };
+
+        assert_eq!(
+            RestartContainer::path_and_query(&request).unwrap(),
+            "/containers/photoprism/restart?t=12"
+        );
+    }
 
     fn build(mode: &str) -> Filters {
         Filters {
