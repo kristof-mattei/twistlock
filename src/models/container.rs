@@ -6,7 +6,7 @@ use serde::de::{SeqAccess, Visitor};
 use serde::{Deserialize, Deserializer};
 
 use crate::models::deserializers::deserialize_empty_as_none;
-use crate::models::id::ContainerId;
+use crate::models::id::{ContainerId, NetworkId};
 
 fn deserialize_names<'de, D>(deserializer: D) -> Result<Box<[Box<str>]>, D::Error>
 where
@@ -68,6 +68,13 @@ pub struct ContainerSummaryNetworkSettings {
 #[serde(rename_all = "PascalCase")]
 pub struct ContainerSummaryNetwork {
     #[serde(
+        rename(deserialize = "NetworkID"),
+        default,
+        deserialize_with = "deserialize_empty_as_none"
+    )]
+    pub network_id: Option<NetworkId>,
+
+    #[serde(
         rename(deserialize = "IPAddress"),
         deserialize_with = "deserialize_empty_as_none"
     )]
@@ -105,6 +112,7 @@ mod tests {
     use pretty_assertions::assert_eq;
 
     use crate::models::container::ContainerSummary;
+    use crate::models::id::NetworkId;
 
     #[test]
     fn deserialize() {
@@ -286,6 +294,31 @@ mod tests {
 
         assert_eq!(network.ip_address, Some(Ipv4Addr::new(172, 19, 0, 2)));
         assert_eq!(network.global_ipv6_address, None);
+    }
+
+    #[test]
+    fn container_summary_parses_the_network_id() {
+        let input = r#"[{"Id":"582036c7a5e8","Names":["/photoprism"],"Labels":{},"State":"running","NetworkSettings":{"Networks":{"some-net":{"NetworkID":"88cad55e9ed7797a340f76b9a6bd4963c2dea4dc680ab37984f298ae2dfc6c3c","IPAddress":"172.19.0.2","GlobalIPv6Address":""}}}}]"#;
+
+        let containers: Vec<ContainerSummary> = serde_json::from_slice(input.as_bytes()).unwrap();
+        let network = &containers[0].network_settings.networks["some-net"];
+
+        assert_eq!(
+            network.network_id,
+            Some(NetworkId::new(
+                "88cad55e9ed7797a340f76b9a6bd4963c2dea4dc680ab37984f298ae2dfc6c3c"
+            ))
+        );
+    }
+
+    #[test]
+    fn container_summary_empty_network_id_is_none() {
+        let input = r#"[{"Id":"582036c7a5e8","Names":["/photoprism"],"Labels":{},"State":"created","NetworkSettings":{"Networks":{"some-net":{"NetworkID":"","IPAddress":"","GlobalIPv6Address":""}}}}]"#;
+
+        let containers: Vec<ContainerSummary> = serde_json::from_slice(input.as_bytes()).unwrap();
+        let network = &containers[0].network_settings.networks["some-net"];
+
+        assert_eq!(network.network_id, None);
     }
 
     #[test]
