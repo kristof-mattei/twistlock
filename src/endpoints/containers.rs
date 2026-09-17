@@ -92,21 +92,21 @@ mod tests {
     #[test]
     fn inspect_container_path_from_name() {
         assert_eq!(
-            InspectContainer::path_and_query(&ContainerRef::IdOrName("photoprism")).unwrap(),
-            "/containers/photoprism/json"
+            InspectContainer::path_and_query(&ContainerRef::IdOrName("ubuntu")).unwrap(),
+            "/containers/ubuntu/json"
         );
     }
 
     #[test]
-    fn restart_container_path_carries_the_timeout() {
+    fn restart_container_path_includes_the_timeout() {
         let request = RestartContainerRequest {
-            container: ContainerRef::IdOrName("photoprism"),
+            container: ContainerRef::IdOrName("ubuntu"),
             timeout: Duration::from_secs(12),
         };
 
         assert_eq!(
             RestartContainer::path_and_query(&request).unwrap(),
-            "/containers/photoprism/restart?t=12"
+            "/containers/ubuntu/restart?t=12"
         );
     }
 
