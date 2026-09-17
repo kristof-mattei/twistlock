@@ -1,7 +1,28 @@
+use std::fmt;
+
 use hashbrown::HashMap;
 use serde::Deserialize;
+use thiserror::Error;
 
 use crate::models::id::{ContainerId, NetworkId};
+
+/// A line of the event stream that did not decode into an [`Event`].
+#[derive(Error)]
+#[error("Failed to decode event: {}", String::from_utf8_lossy(.line))]
+pub struct EventDecodeError {
+    pub source: serde_json::Error,
+    /// The line as received, without its newline.
+    pub line: Box<[u8]>,
+}
+
+impl fmt::Debug for EventDecodeError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("EventDecodeError")
+            .field("source", &self.source)
+            .field("line", &String::from_utf8_lossy(&self.line))
+            .finish()
+    }
+}
 
 #[derive(Deserialize, Debug)]
 #[serde(from = "RawEvent")]
@@ -97,10 +118,17 @@ impl From<RawEvent> for Event {
 mod tests {
     use pretty_assertions::assert_eq;
 
-    use crate::models::events::Event;
+    use crate::models::events::{Event, EventDecodeError};
 
     fn parse(json: &str) -> Result<Event, serde_json::Error> {
         serde_json::from_str(json)
+    }
+
+    fn decode_error(line: &[u8]) -> EventDecodeError {
+        EventDecodeError {
+            source: serde_json::from_slice::<Event>(line).unwrap_err(),
+            line: line.into(),
+        }
     }
 
     fn event(kind: &str, action: &str) -> String {
@@ -136,5 +164,20 @@ mod tests {
         };
 
         assert_eq!(body.actor.id.as_str(), "0f9fc026ac74");
+    }
+
+    #[test]
+    fn decode_error_displays_invalid_utf8_as_replacement_character() {
+        assert_eq!(
+            decode_error(b"{\xff").to_string(),
+            format!("Failed to decode event: {{{}", char::REPLACEMENT_CHARACTER)
+        );
+    }
+
+    #[test]
+    fn decode_error_debug_prints_the_line_as_text() {
+        let debug = format!("{:?}", decode_error(b"not json"));
+
+        assert!(debug.contains(r#"line: "not json""#), "{}", debug);
     }
 }
