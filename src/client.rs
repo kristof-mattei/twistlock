@@ -31,6 +31,7 @@ use crate::http_client::{build_request, execute_request};
 use crate::models::container::ContainerSummary;
 use crate::models::container_inspect::ContainerInspect;
 use crate::models::events::Event;
+use crate::models::id::{ContainerRef, NetworkRef};
 use crate::models::network::{NetworkInspect, NetworkSummary};
 
 #[derive(Debug)]
@@ -280,12 +281,13 @@ impl Client {
     ///
     /// * Failure to send the request
     /// * Response is not success
-    pub async fn inspect_container(
+    pub async fn inspect_container<'r, C: Into<ContainerRef<'r>>>(
         &self,
-        id: &str,
+        container: C,
     ) -> Result<ContainerInspect, ApiEndpointCallError<<InspectContainer as ApiEndpoint>::Error>>
     {
-        self.call::<InspectContainer>(id).await
+        self.call::<InspectContainer>(container.into().as_str())
+            .await
     }
 
     /// Get all networks.
@@ -311,12 +313,12 @@ impl Client {
     ///
     /// * Failure to send the request
     /// * Response is not success
-    pub async fn inspect_network(
+    pub async fn inspect_network<'r, N: Into<NetworkRef<'r>>>(
         &self,
-        id: &str,
+        network: N,
     ) -> Result<NetworkInspect, ApiEndpointCallError<<InspectContainer as ApiEndpoint>::Error>>
     {
-        self.call::<InspectNetwork>(id).await
+        self.call::<InspectNetwork>(network.into().as_str()).await
     }
 
     /// Restart a container.
@@ -327,13 +329,13 @@ impl Client {
     ///
     /// * Failure to send the request
     /// * Response is not success
-    pub async fn restart_container(
+    pub async fn restart_container<'r, C: Into<ContainerRef<'r>>>(
         &self,
-        container_id: &str,
+        container: C,
         timeout: std::time::Duration,
     ) -> Result<(), ApiEndpointCallError<<RestartContainer as ApiEndpoint>::Error>> {
         self.call::<RestartContainer>(&RestartContainerRequest {
-            id: container_id.to_owned(),
+            id: container.into().as_str().to_owned(),
             timeout,
         })
         .await

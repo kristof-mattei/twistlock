@@ -6,6 +6,7 @@ use serde::de::{SeqAccess, Visitor};
 use serde::{Deserialize, Deserializer};
 
 use crate::models::deserializers::deserialize_empty_as_none;
+use crate::models::id::ContainerId;
 
 fn deserialize_names<'de, D>(deserializer: D) -> Result<Box<[Box<str>]>, D::Error>
 where
@@ -48,7 +49,7 @@ where
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "PascalCase")]
 pub struct ContainerSummary {
-    pub id: Box<str>,
+    pub id: ContainerId,
     #[serde(deserialize_with = "deserialize_names")]
     #[serde(rename(deserialize = "Names"))]
     pub names: Box<[Box<str>]>,
@@ -82,11 +83,7 @@ pub struct ContainerSummaryNetwork {
 impl ContainerSummary {
     #[must_use]
     pub fn get_short_id(&self) -> &str {
-        #[expect(
-            clippy::string_slice,
-            reason = "ID is guaranteed to be hex, and thus ASCII"
-        )]
-        &self.id[0..12]
+        self.id.as_short()
     }
 
     #[must_use]
@@ -122,7 +119,7 @@ mod tests {
         assert_eq!(containers.len(), 2);
 
         assert_eq!(
-            containers[0].id.as_ref(),
+            containers[0].id.as_str(),
             "582036c7a5e8719bbbc9476e4216bfaf4fd318b61723f41f2e8fe3b60d8182ae"
         );
         assert_eq!(containers[0].names.len(), 1);
@@ -131,7 +128,7 @@ mod tests {
         assert_eq!(containers[0].labels, HashMap::new());
 
         assert_eq!(
-            containers[1].id.as_ref(),
+            containers[1].id.as_str(),
             "281ea0c72e2e4a41fd2f81df945da9dfbfbc7ea0fe5e59c3d2a8234552e367cf"
         );
         assert_eq!(containers[1].names.len(), 1);
@@ -153,7 +150,7 @@ mod tests {
         assert_eq!(containers.len(), 1);
 
         assert_eq!(
-            containers[0].id.as_ref(),
+            containers[0].id.as_str(),
             "582036c7a5e8719bbbc9476e4216bfaf4fd318b61723f41f2e8fe3b60d8182ae"
         );
         assert_eq!(containers[0].names.len(), 2);
@@ -176,7 +173,7 @@ mod tests {
         assert_eq!(containers.len(), 1);
 
         assert_eq!(
-            containers[0].id.as_ref(),
+            containers[0].id.as_str(),
             "582036c7a5e8719bbbc9476e4216bfaf4fd318b61723f41f2e8fe3b60d8182ae"
         );
         assert_eq!(containers[0].names.len(), 1);
@@ -211,7 +208,7 @@ mod tests {
         assert_eq!(containers.len(), 1);
 
         assert_eq!(
-            containers[0].id.as_ref(),
+            containers[0].id.as_str(),
             "582036c7a5e8719bbbc9476e4216bfaf4fd318b61723f41f2e8fe3b60d8182ae"
         );
         assert_eq!(containers[0].names.len(), 1);
@@ -246,7 +243,7 @@ mod tests {
         assert_eq!(containers.len(), 1);
 
         assert_eq!(
-            containers[0].id.as_ref(),
+            containers[0].id.as_str(),
             "582036c7a5e8719bbbc9476e4216bfaf4fd318b61723f41f2e8fe3b60d8182ae"
         );
         assert_eq!(containers[0].names.len(), 0);
@@ -270,7 +267,7 @@ mod tests {
         assert_eq!(containers.len(), 1);
 
         assert_eq!(
-            containers[0].id.as_ref(),
+            containers[0].id.as_str(),
             "582036c7a5e8719bbbc9476e4216bfaf4fd318b61723f41f2e8fe3b60d8182ae"
         );
         assert_eq!(containers[0].names.len(), 2);
