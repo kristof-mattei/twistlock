@@ -2,7 +2,7 @@ use std::fmt::Display;
 
 use hashbrown::{HashMap, HashSet};
 use serde::ser::SerializeSeq as _;
-use serde::{Serialize, Serializer};
+use serde::{Deserialize, Serialize, Serializer};
 
 #[expect(clippy::ref_option, reason = "Serde API")]
 fn single_to_string_array<S, T>(v: &Option<T>, serializer: S) -> Result<S::Ok, S::Error>
@@ -77,7 +77,8 @@ where
     }
 }
 
-#[derive(Eq, PartialEq, Hash)]
+#[derive(Deserialize, Eq, PartialEq, Hash, Debug)]
+#[serde(rename_all = "lowercase")]
 pub enum Status {
     Created,
     Restarting,
