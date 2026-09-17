@@ -76,7 +76,7 @@ mod tests {
     use crate::endpoints::containers::{
         InspectContainer, RestartContainer, RestartContainerRequest,
     };
-    use crate::filters::{Filters, Health};
+    use crate::filters::{Filters, Health, Status};
     use crate::models::id::{ContainerId, ContainerRef};
 
     #[test]
@@ -143,5 +143,17 @@ mod tests {
             &*custom_and_unhealthy_encoded,
             "%7B%22label%22%3A%5B%22custom%3Dtrue%22%5D%2C%22health%22%3A%5B%22unhealthy%22%5D%7D"
         );
+    }
+
+    #[test]
+    fn build_decode_status() {
+        let exited = Filters {
+            status: Some(HashSet::from_iter([Status::Exited])),
+            ..Filters::default()
+        };
+
+        let exited_encoded = url_encode(&exited).unwrap();
+
+        assert_eq!(&*exited_encoded, "%7B%22status%22%3A%5B%22exited%22%5D%7D");
     }
 }
