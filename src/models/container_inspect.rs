@@ -4,7 +4,7 @@ use hashbrown::HashMap;
 use serde::Deserialize;
 
 use crate::models::deserializers::{deserialize_empty_as_none, deserialize_null_as_empty};
-use crate::models::id::ContainerId;
+use crate::models::id::{ContainerId, NetworkId};
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "PascalCase")]
@@ -39,6 +39,13 @@ pub struct ContainerNetworkSettings {
 #[serde(rename_all = "PascalCase")]
 pub struct ContainerNetwork {
     #[serde(
+        rename(deserialize = "NetworkID"),
+        default,
+        deserialize_with = "deserialize_empty_as_none"
+    )]
+    pub network_id: Option<NetworkId>,
+
+    #[serde(
         rename(deserialize = "IPAddress"),
         deserialize_with = "deserialize_empty_as_none"
     )]
@@ -65,9 +72,40 @@ mod tests {
     use pretty_assertions::assert_eq;
 
     use super::ContainerNetwork;
+    use crate::models::id::NetworkId;
 
     fn parse(json: &str) -> Result<ContainerNetwork, serde_json::Error> {
         serde_json::from_str(json)
+    }
+
+    #[test]
+    fn network_id_is_parsed() {
+        let container_network = parse(
+            r#"{"NetworkID":"88cad55e9ed7797a340f76b9a6bd4963c2dea4dc680ab37984f298ae2dfc6c3c","IPAddress":"172.18.0.2","GlobalIPv6Address":""}"#,
+        )
+        .unwrap();
+
+        assert_eq!(
+            container_network.network_id,
+            Some(NetworkId::new(
+                "88cad55e9ed7797a340f76b9a6bd4963c2dea4dc680ab37984f298ae2dfc6c3c"
+            ))
+        );
+    }
+
+    #[test]
+    fn empty_network_id_is_none() {
+        let container_network =
+            parse(r#"{"NetworkID":"","IPAddress":"","GlobalIPv6Address":""}"#).unwrap();
+
+        assert_eq!(container_network.network_id, None);
+    }
+
+    #[test]
+    fn absent_network_id_is_none() {
+        let container_network = parse(r#"{"IPAddress":"","GlobalIPv6Address":""}"#).unwrap();
+
+        assert_eq!(container_network.network_id, None);
     }
 
     #[test]
