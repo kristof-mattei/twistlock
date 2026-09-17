@@ -30,7 +30,7 @@ use crate::http_client;
 use crate::http_client::{build_request, execute_request};
 use crate::models::container::ContainerSummary;
 use crate::models::container_inspect::ContainerInspect;
-use crate::models::events::Event;
+use crate::models::events::{Event, EventDecodeError};
 use crate::models::id::{ContainerRef, NetworkRef};
 use crate::models::network::{NetworkInspect, NetworkSummary};
 
@@ -343,15 +343,18 @@ impl Client {
 
     /// Listen for events.
     ///
+    /// An undecodable line is sent as an [`EventDecodeError`], and the stream continues.
+    ///
     /// # Errors
     ///
     /// This function will return an error if:
     ///
     /// * Failure to send the request
-    /// * Failed to decode JSON line
+    /// * The daemon ends the stream
+    /// * The receiver is closed
     pub async fn produce_events(
         &self,
-        sender: tokio::sync::mpsc::Sender<Event>,
+        sender: tokio::sync::mpsc::Sender<Result<Event, EventDecodeError>>,
         cancellation_token: &CancellationToken,
     ) -> Result<(), eyre::Report> {
         let path_and_query = format!("/events{}", "");
@@ -390,7 +393,7 @@ impl Client {
             buffer.extend_from_slice(&data);
 
             while let Some(i) = buffer.iter().position(|b| b == &b'\n') {
-                Client::decode_send(&buffer[0..=i], &sender).await?;
+                Client::decode_send(&buffer[0..i], &sender).await?;
 
                 buffer.drain(0..=i);
             }
@@ -407,28 +410,70 @@ impl Client {
     }
 
     async fn decode_send(
-        data: &[u8],
-        sender: &tokio::sync::mpsc::Sender<Event>,
+        line: &[u8],
+        sender: &tokio::sync::mpsc::Sender<Result<Event, EventDecodeError>>,
     ) -> Result<(), eyre::Report> {
-        event!(Level::TRACE, data = %String::from_utf8_lossy(data), "New event");
+        event!(Level::TRACE, data = %String::from_utf8_lossy(line), "New event");
 
-        let decoded = match serde_json::from_slice(data) {
-            Ok(event) => event,
-            Err(error) => {
-                event!(
-                    Level::ERROR,
-                    ?error,
-                    data = %String::from_utf8_lossy(data),
-                    "Failed to parse json to struct"
-                );
-
-                return Ok(());
-            },
-        };
+        let decoded = serde_json::from_slice(line).map_err(|source| EventDecodeError {
+            source,
+            line: line.into(),
+        });
 
         sender
             .send(decoded)
             .await
             .map_err(|error| eyre::Report::msg("Channel closed").error(error))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use pretty_assertions::assert_eq;
+
+    use crate::client::Client;
+    use crate::models::events::Event;
+
+    #[tokio::test]
+    async fn decodable_line_is_sent_as_event() {
+        let (sender, mut receiver) = tokio::sync::mpsc::channel(1);
+
+        Client::decode_send(
+            br#"{"Type":"container","Action":"start","Actor":{"ID":"0f9fc026ac74","Attributes":{}},"scope":"local","time":1,"timeNano":2}"#,
+            &sender,
+        )
+        .await
+        .unwrap();
+
+        let Some(Ok(Event::Container(body))) = receiver.recv().await else {
+            panic!("not a container event");
+        };
+
+        assert_eq!(&*body.action, "start");
+    }
+
+    #[tokio::test]
+    async fn undecodable_line_is_sent_as_error() {
+        let (sender, mut receiver) = tokio::sync::mpsc::channel(1);
+
+        Client::decode_send(br#"{"Type":"container"}"#, &sender)
+            .await
+            .unwrap();
+
+        let Some(Err(error)) = receiver.recv().await else {
+            panic!("not a decode error");
+        };
+
+        assert_eq!(&*error.line, br#"{"Type":"container"}"#);
+    }
+
+    #[tokio::test]
+    async fn closed_receiver_is_an_error() {
+        let (sender, receiver) = tokio::sync::mpsc::channel(1);
+        drop(receiver);
+
+        let error = Client::decode_send(b"{}", &sender).await.unwrap_err();
+
+        assert_eq!(error.to_string(), "Channel closed");
     }
 }
