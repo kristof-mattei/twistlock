@@ -77,6 +77,7 @@ where
     }
 }
 
+#[derive(Eq, PartialEq, Hash)]
 pub enum Status {
     Created,
     Restarting,
