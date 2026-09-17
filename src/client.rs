@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use color_eyre::{Section as _, eyre};
 use http_body_util::{BodyExt as _, Full};
-use hyper::body::{Bytes, Incoming};
+use hyper::body::{Body, Bytes, Incoming};
 use hyper::{Method, Response};
 use hyper_rustls::{FixedServerNameResolver, HttpsConnector, HttpsConnectorBuilder};
 #[cfg(not(target_os = "windows"))]
@@ -348,6 +348,7 @@ impl Client {
     /// This function will return an error if:
     ///
     /// * Failure to send the request
+    /// * Failure to read a frame
     /// * The daemon ends the stream
     /// * The receiver is closed
     pub async fn produce_events(
@@ -357,14 +358,26 @@ impl Client {
     ) -> Result<(), eyre::Report> {
         let path_and_query = format!("/events{}", "");
 
-        let mut response = self.send_request(&path_and_query, Method::GET).await?;
+        let response = self.send_request(&path_and_query, Method::GET).await?;
 
+        Client::forward_events(response, &sender, cancellation_token).await
+    }
+
+    async fn forward_events<B>(
+        mut body: B,
+        sender: &tokio::sync::mpsc::Sender<Result<Event, EventDecodeError>>,
+        cancellation_token: &CancellationToken,
+    ) -> Result<(), eyre::Report>
+    where
+        B: Body<Data = Bytes> + Unpin,
+        B::Error: std::error::Error + Send + Sync + 'static,
+    {
         let mut buffer = Vec::<u8>::new();
 
         // Inspired by https://github.com/EmbarkStudios/wasmtime/blob/056ccdec94f89d00325970d1239429a1b39ec729/crates/wasi-http/src/http_impl.rs#L246-L268
         loop {
             let frame = tokio::select! {
-                frame = response.frame() => frame,
+                frame = body.frame() => frame,
                 () = cancellation_token.cancelled() => {
                     return Ok(());
                 },
@@ -373,9 +386,7 @@ impl Client {
             let frame = match frame {
                 Some(Ok(frame)) => frame,
                 Some(Err(error)) => {
-                    event!(Level::ERROR, ?error, "Failed to read frame");
-
-                    continue;
+                    return Err(eyre::Report::new(error).wrap_err("Failed to read frame"));
                 },
                 None => {
                     // TODO is this correct? If the server stops?
@@ -391,7 +402,7 @@ impl Client {
             buffer.extend_from_slice(&data);
 
             while let Some(i) = buffer.iter().position(|b| b == &b'\n') {
-                Client::decode_send(&buffer[0..i], &sender).await?;
+                Client::decode_send(&buffer[0..i], sender).await?;
 
                 buffer.drain(0..=i);
             }
@@ -427,10 +438,46 @@ impl Client {
 
 #[cfg(test)]
 mod tests {
+    use std::pin::Pin;
+    use std::task::{Context, Poll};
+
+    use hyper::body::{Body, Bytes, Frame};
     use pretty_assertions::assert_eq;
+    use tokio_util::sync::CancellationToken;
 
     use crate::client::Client;
     use crate::models::events::Event;
+
+    /// Yields its error once, then ends.
+    struct FailingBody(Option<std::io::Error>);
+
+    impl Body for FailingBody {
+        type Data = Bytes;
+        type Error = std::io::Error;
+
+        fn poll_frame(
+            mut self: Pin<&mut Self>,
+            _cx: &mut Context<'_>,
+        ) -> Poll<Option<Result<Frame<Bytes>, std::io::Error>>> {
+            Poll::Ready(self.0.take().map(Err))
+        }
+    }
+
+    #[tokio::test]
+    async fn failed_frame_read_is_returned() {
+        let (sender, _receiver) = tokio::sync::mpsc::channel(1);
+
+        let error = Client::forward_events(
+            FailingBody(Some(std::io::Error::other("connection reset"))),
+            &sender,
+            &CancellationToken::new(),
+        )
+        .await
+        .unwrap_err();
+
+        assert_eq!(error.to_string(), "Failed to read frame");
+        assert_eq!(error.root_cause().to_string(), "connection reset");
+    }
 
     #[tokio::test]
     async fn decodable_line_is_sent_as_event() {
