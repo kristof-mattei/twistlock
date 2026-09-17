@@ -116,7 +116,7 @@ mod tests {
 
     #[test]
     fn deserialize() {
-        let input = r#"[{"Id":"582036c7a5e8719bbbc9476e4216bfaf4fd318b61723f41f2e8fe3b60d8182ae","Names":["/photoprism"],"Labels":{},"State":"running","NetworkSettings":{"Networks":{}}},{"Id":"281ea0c72e2e4a41fd2f81df945da9dfbfbc7ea0fe5e59c3d2a8234552e367cf","Names":["/whoogle-search"],"Labels":{},"State":"running","NetworkSettings":{"Networks":{}}}]"#;
+        let input = r#"[{"Id":"582036c7a5e8719bbbc9476e4216bfaf4fd318b61723f41f2e8fe3b60d8182ae","Names":["/ubuntu"],"Labels":{},"State":"running","NetworkSettings":{"Networks":{}}},{"Id":"281ea0c72e2e4a41fd2f81df945da9dfbfbc7ea0fe5e59c3d2a8234552e367cf","Names":["/whoogle-search"],"Labels":{},"State":"running","NetworkSettings":{"Networks":{}}}]"#;
 
         let deserialized: Result<Vec<ContainerSummary>, _> =
             serde_json::from_slice(input.as_bytes());
@@ -131,7 +131,7 @@ mod tests {
             "582036c7a5e8719bbbc9476e4216bfaf4fd318b61723f41f2e8fe3b60d8182ae"
         );
         assert_eq!(containers[0].names.len(), 1);
-        assert_eq!(containers[0].names[0].as_ref(), "photoprism");
+        assert_eq!(containers[0].names[0].as_ref(), "ubuntu");
         assert_eq!(containers[0].state.as_ref(), "running");
         assert_eq!(containers[0].labels, HashMap::new());
 
@@ -147,7 +147,7 @@ mod tests {
 
     #[test]
     fn deserialize_multiple_names() {
-        let input = r#"[{"Id":"582036c7a5e8719bbbc9476e4216bfaf4fd318b61723f41f2e8fe3b60d8182ae","Names":["/photoprism-1","/photoprism-2"],"Labels":{}, "State":"running","NetworkSettings":{"Networks":{}}}]"#;
+        let input = r#"[{"Id":"582036c7a5e8719bbbc9476e4216bfaf4fd318b61723f41f2e8fe3b60d8182ae","Names":["/ubuntu-1","/ubuntu-2"],"Labels":{}, "State":"running","NetworkSettings":{"Networks":{}}}]"#;
 
         let deserialized: Result<Vec<ContainerSummary>, _> =
             serde_json::from_slice(input.as_bytes());
@@ -162,15 +162,15 @@ mod tests {
             "582036c7a5e8719bbbc9476e4216bfaf4fd318b61723f41f2e8fe3b60d8182ae"
         );
         assert_eq!(containers[0].names.len(), 2);
-        assert_eq!(containers[0].names[0].as_ref(), "photoprism-1");
-        assert_eq!(containers[0].names[1].as_ref(), "photoprism-2");
+        assert_eq!(containers[0].names[0].as_ref(), "ubuntu-1");
+        assert_eq!(containers[0].names[1].as_ref(), "ubuntu-2");
         assert_eq!(containers[0].state.as_ref(), "running");
         assert_eq!(containers[0].labels, HashMap::new());
     }
 
     #[test]
     fn deserialize_timeout() {
-        let input = r#"[{"Id":"582036c7a5e8719bbbc9476e4216bfaf4fd318b61723f41f2e8fe3b60d8182ae","Names":["/photoprism"],"State":"running","Labels":{"autoheal.stop.timeout":"12"},"NetworkSettings":{"Networks":{}}}]"#;
+        let input = r#"[{"Id":"582036c7a5e8719bbbc9476e4216bfaf4fd318b61723f41f2e8fe3b60d8182ae","Names":["/ubuntu"],"State":"running","Labels":{"autoheal.stop.timeout":"12"},"NetworkSettings":{"Networks":{}}}]"#;
 
         let deserialized: Result<Vec<ContainerSummary>, _> =
             serde_json::from_slice(input.as_bytes());
@@ -185,7 +185,7 @@ mod tests {
             "582036c7a5e8719bbbc9476e4216bfaf4fd318b61723f41f2e8fe3b60d8182ae"
         );
         assert_eq!(containers[0].names.len(), 1);
-        assert_eq!(containers[0].names[0].as_ref(), "photoprism");
+        assert_eq!(containers[0].names[0].as_ref(), "ubuntu");
         assert_eq!(containers[0].state.as_ref(), "running");
         assert_eq!(
             containers[0].labels,
@@ -195,7 +195,7 @@ mod tests {
 
     #[test]
     fn deserialize_no_labels() {
-        let input = r#"[{"Id":"582036c7a5e8719bbbc9476e4216bfaf4fd318b61723f41f2e8fe3b60d8182ae","Names":["/photoprism"],"State":"running","NetworkSettings":{"Networks":{}}}]"#;
+        let input = r#"[{"Id":"582036c7a5e8719bbbc9476e4216bfaf4fd318b61723f41f2e8fe3b60d8182ae","Names":["/ubuntu"],"State":"running","NetworkSettings":{"Networks":{}}}]"#;
 
         let deserialized: Result<Vec<ContainerSummary>, _> =
             serde_json::from_slice(input.as_bytes());
@@ -205,7 +205,7 @@ mod tests {
 
     #[test]
     fn deserialize_missing_timeout() {
-        let input = r#"[{"Id":"582036c7a5e8719bbbc9476e4216bfaf4fd318b61723f41f2e8fe3b60d8182ae","Names":["/photoprism"],"State":"running","Labels":{"autoheal.stop.other_label":"some_value"},"NetworkSettings":{"Networks":{}}}]"#;
+        let input = r#"[{"Id":"582036c7a5e8719bbbc9476e4216bfaf4fd318b61723f41f2e8fe3b60d8182ae","Names":["/ubuntu"],"State":"running","Labels":{"autoheal.stop.other_label":"some_value"},"NetworkSettings":{"Networks":{}}}]"#;
 
         let deserialized: Result<Vec<ContainerSummary>, _> =
             serde_json::from_slice(input.as_bytes());
@@ -220,7 +220,7 @@ mod tests {
             "582036c7a5e8719bbbc9476e4216bfaf4fd318b61723f41f2e8fe3b60d8182ae"
         );
         assert_eq!(containers[0].names.len(), 1);
-        assert_eq!(containers[0].names[0].as_ref(), "photoprism");
+        assert_eq!(containers[0].names[0].as_ref(), "ubuntu");
         assert_eq!(containers[0].state.as_ref(), "running");
         assert_eq!(
             containers[0].labels,
@@ -264,7 +264,7 @@ mod tests {
 
     #[test]
     fn deserialize_multiple_names_with_and_without_slash() {
-        let input = r#"[{"Id":"582036c7a5e8719bbbc9476e4216bfaf4fd318b61723f41f2e8fe3b60d8182ae","Names":["/photoprism-1","photoprism-2"],"Labels":{},"State":"running","NetworkSettings":{"Networks":{}}}]"#;
+        let input = r#"[{"Id":"582036c7a5e8719bbbc9476e4216bfaf4fd318b61723f41f2e8fe3b60d8182ae","Names":["/ubuntu-1","ubuntu-2"],"Labels":{},"State":"running","NetworkSettings":{"Networks":{}}}]"#;
 
         let deserialized: Result<Vec<ContainerSummary>, _> =
             serde_json::from_slice(input.as_bytes());
@@ -279,15 +279,15 @@ mod tests {
             "582036c7a5e8719bbbc9476e4216bfaf4fd318b61723f41f2e8fe3b60d8182ae"
         );
         assert_eq!(containers[0].names.len(), 2);
-        assert_eq!(containers[0].names[0].as_ref(), "photoprism-1");
-        assert_eq!(containers[0].names[1].as_ref(), "photoprism-2");
+        assert_eq!(containers[0].names[0].as_ref(), "ubuntu-1");
+        assert_eq!(containers[0].names[1].as_ref(), "ubuntu-2");
         assert_eq!(containers[0].state.as_ref(), "running");
         assert_eq!(containers[0].labels, HashMap::new());
     }
 
     #[test]
     fn container_summary_parses_the_network_addresses() {
-        let input = r#"[{"Id":"582036c7a5e8","Names":["/photoprism"],"Labels":{},"State":"running","NetworkSettings":{"Networks":{"some-net":{"IPAddress":"172.19.0.2","GlobalIPv6Address":"","Aliases":null,"DNSNames":null}}}}]"#;
+        let input = r#"[{"Id":"582036c7a5e8","Names":["/ubuntu"],"Labels":{},"State":"running","NetworkSettings":{"Networks":{"some-net":{"IPAddress":"172.19.0.2","GlobalIPv6Address":"","Aliases":null,"DNSNames":null}}}}]"#;
 
         let containers: Vec<ContainerSummary> = serde_json::from_slice(input.as_bytes()).unwrap();
         let network = &containers[0].network_settings.networks["some-net"];
@@ -298,7 +298,7 @@ mod tests {
 
     #[test]
     fn container_summary_parses_the_network_id() {
-        let input = r#"[{"Id":"582036c7a5e8","Names":["/photoprism"],"Labels":{},"State":"running","NetworkSettings":{"Networks":{"some-net":{"NetworkID":"88cad55e9ed7797a340f76b9a6bd4963c2dea4dc680ab37984f298ae2dfc6c3c","IPAddress":"172.19.0.2","GlobalIPv6Address":""}}}}]"#;
+        let input = r#"[{"Id":"582036c7a5e8","Names":["/ubuntu"],"Labels":{},"State":"running","NetworkSettings":{"Networks":{"some-net":{"NetworkID":"88cad55e9ed7797a340f76b9a6bd4963c2dea4dc680ab37984f298ae2dfc6c3c","IPAddress":"172.19.0.2","GlobalIPv6Address":""}}}}]"#;
 
         let containers: Vec<ContainerSummary> = serde_json::from_slice(input.as_bytes()).unwrap();
         let network = &containers[0].network_settings.networks["some-net"];
@@ -313,7 +313,7 @@ mod tests {
 
     #[test]
     fn container_summary_empty_network_id_is_none() {
-        let input = r#"[{"Id":"582036c7a5e8","Names":["/photoprism"],"Labels":{},"State":"created","NetworkSettings":{"Networks":{"some-net":{"NetworkID":"","IPAddress":"","GlobalIPv6Address":""}}}}]"#;
+        let input = r#"[{"Id":"582036c7a5e8","Names":["/ubuntu"],"Labels":{},"State":"created","NetworkSettings":{"Networks":{"some-net":{"NetworkID":"","IPAddress":"","GlobalIPv6Address":""}}}}]"#;
 
         let containers: Vec<ContainerSummary> = serde_json::from_slice(input.as_bytes()).unwrap();
         let network = &containers[0].network_settings.networks["some-net"];
