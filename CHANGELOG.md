@@ -1,4 +1,24 @@
 <!-- header goes here -->
+## [0.5.0](https://github.com/kristof-mattei/twistlock/compare/v0.4.0..v0.5.0) - 2026-09-17
+
+### 🚀 Features
+
+- *(client)* [**breaking**] Take `ContainerRef` and `NetworkRef` in the ID-taking methods by [@kristof-mattei](https://github.com/kristof-mattei) ([`508f72c`](https://github.com/kristof-mattei/twistlock/commit/508f72cbad2d4e57e829e37f2e26e87fe07efb87))
+- *(client)* [**breaking**] Send an undecodable event as `EventDecodeError` by [@kristof-mattei](https://github.com/kristof-mattei) ([`841ab93`](https://github.com/kristof-mattei/twistlock/commit/841ab934bbca5b0bca177b5629b7cc14bd42dbf2))
+- *(models)* [**breaking**] Type the container and network IDs by [@kristof-mattei](https://github.com/kristof-mattei) ([`84f98f0`](https://github.com/kristof-mattei/twistlock/commit/84f98f0f4c8d2edc1a932f23a60768fdbc8b795f))
+- *(models)* Implement `FromStr` for `NetworkId` by [@kristof-mattei](https://github.com/kristof-mattei) ([`8438440`](https://github.com/kristof-mattei/twistlock/commit/843844060af97858d41115a5b585afa8c72ef190))
+- *(models)* Expose `NetworkID` on container networks by [@kristof-mattei](https://github.com/kristof-mattei) ([`8f36cf6`](https://github.com/kristof-mattei/twistlock/commit/8f36cf6fb91c839e4ba7a37274e0e231050e8089))
+
+### 🐛 Bug Fixes
+
+- *(client)* Use the error type of `InspectNetwork` in `inspect_network` by [@kristof-mattei](https://github.com/kristof-mattei) ([`880da2d`](https://github.com/kristof-mattei/twistlock/commit/880da2d5dd855be6f5e13f3767de7d79a249c39c))
+- *(filters)* Derive `Eq` and `Hash` on `Status` by [@kristof-mattei](https://github.com/kristof-mattei) ([`062ca3d`](https://github.com/kristof-mattei/twistlock/commit/062ca3dd30d8afe0932cc96f97a4525fc59a10a3))
+
+### 🚜 Refactor
+
+- *(endpoint)* [**breaking**] Let `ApiEndpoint::Request` borrow by [@kristof-mattei](https://github.com/kristof-mattei) ([`b55e05e`](https://github.com/kristof-mattei/twistlock/commit/b55e05ea33ad62959cc275abcaa70694f78a971c))
+- *(models)* [**breaking**] Make `Event` an enum over its type by [@kristof-mattei](https://github.com/kristof-mattei) ([`f8496fc`](https://github.com/kristof-mattei/twistlock/commit/f8496fc5671461bea96978024b311cb9df6f177e))
+- *(models)* [**breaking**] Split `Event::Other` into the documented kinds by [@kristof-mattei](https://github.com/kristof-mattei) ([`b938862`](https://github.com/kristof-mattei/twistlock/commit/b938862f7fbee85f930aef1b0eb91b67afa03b2f))
 ## [0.4.0](https://github.com/kristof-mattei/twistlock/compare/v0.3.1..v0.4.0) - 2026-09-15
 
 ### 🚀 Features
@@ -28,6 +48,13 @@
 ### 🚜 Refactor
 
 - [**breaking**] Couple the client key and cert into `ClientCredentialPaths` by [@kristof-mattei](https://github.com/kristof-mattei) ([`d90bc80`](https://github.com/kristof-mattei/twistlock/commit/d90bc80f8a500af122bc04bef59ef56402cd1a69))
+
+### ⚙️ Miscellaneous Tasks
+
+- Tasks.json should not be executable by [@kristof-mattei](https://github.com/kristof-mattei) ([`5527290`](https://github.com/kristof-mattei/twistlock/commit/552729080cf37c4ef92e90228e73971c42540bd9))
+- Remove unused word by [@kristof-mattei](https://github.com/kristof-mattei) ([`4cf5b2d`](https://github.com/kristof-mattei/twistlock/commit/4cf5b2dbd13e7d5f8143634ffaa773f10175141c))
+- Update dictionary by [@kristof-mattei](https://github.com/kristof-mattei) ([`e7f3adf`](https://github.com/kristof-mattei/twistlock/commit/e7f3adf73bd90fcf5c8312052e247aafa3bb5dea))
+- Update dictionary by [@kristof-mattei](https://github.com/kristof-mattei) ([`7d8dfb3`](https://github.com/kristof-mattei/twistlock/commit/7d8dfb3132bff15ec3d5f0a8f79279fcceb0a5a7))
 ## [0.2.1](https://github.com/kristof-mattei/twistlock/compare/v0.2.0..v0.2.1) - 2026-04-23
 
 ### 🐛 Bug Fixes
@@ -87,6 +114,7 @@
 - Rust 1.60.0 by [@kristof-mattei](https://github.com/kristof-mattei) ([`0180532`](https://github.com/kristof-mattei/twistlock/commit/0180532b1e432662ccb7908ebc98d39ad501a227))
 - Rust 1.61.0 by [@kristof-mattei](https://github.com/kristof-mattei) ([`c130478`](https://github.com/kristof-mattei/twistlock/commit/c130478ad91eaf6b1cea04a2cfe57f6e926efa92))
 - Upgrade semgrep to latest version by [@kristof-mattei](https://github.com/kristof-mattei) ([`c7dc4f5`](https://github.com/kristof-mattei/twistlock/commit/c7dc4f5bf96c15784a6b6b5c7ff260a15f244dcd))
+- Devcontainer by [@kristof-mattei](https://github.com/kristof-mattei) ([`1d77ed5`](https://github.com/kristof-mattei/twistlock/commit/1d77ed59fbf4915e3b1393867d56ec36a22f9b42))
 - More rust 1.62 by [@kristof-mattei](https://github.com/kristof-mattei) ([`628756b`](https://github.com/kristof-mattei/twistlock/commit/628756bf8790f9ffe84ac5cb3ff37baac70c7fcc))
 - Sync-repo-settings first pass by [@kristof-mattei](https://github.com/kristof-mattei) ([`0d88baa`](https://github.com/kristof-mattei/twistlock/commit/0d88baa34a3d7b167028941aafdf32e5c464b9c2))
 - Generalize dockerfile by [@kristof-mattei](https://github.com/kristof-mattei) ([`be4e9a5`](https://github.com/kristof-mattei/twistlock/commit/be4e9a5fe9cc34bcd239080845ace4c6a631ba97))
@@ -135,6 +163,7 @@
 - *(deps)* Update rust crate openssl to 0.10.73 by [@renovate[bot]](https://github.com/renovate[bot]) ([`818d5d7`](https://github.com/kristof-mattei/twistlock/commit/818d5d763e04fc8e3f0638a9264e9c8f1aecc4cb))
 - *(deps)* Update rust crate color-eyre to 0.6.5 by [@renovate[bot]](https://github.com/renovate[bot]) ([`6cbb98d`](https://github.com/kristof-mattei/twistlock/commit/6cbb98dc877f5d2785ceb938f3fca30172c21bbe))
 - Enabled codecov by [@kristof-mattei](https://github.com/kristof-mattei) ([`70a7b60`](https://github.com/kristof-mattei/twistlock/commit/70a7b60de32c66a3c0315f67d0f8278d91fc797a))
+- Codecov by [@kristof-mattei](https://github.com/kristof-mattei) ([`1f6458f`](https://github.com/kristof-mattei/twistlock/commit/1f6458f7eeb0ba5dd85d02ebcd67734c4dbd5623))
 - Bumped cargo version by [@kristof-mattei](https://github.com/kristof-mattei) ([`f47f7d0`](https://github.com/kristof-mattei/twistlock/commit/f47f7d0d5f7c6ba227002ba705a58f2fdf05aa2b))
 - Username.toLowerCase() by [@kristof-mattei](https://github.com/kristof-mattei) ([`3c41052`](https://github.com/kristof-mattei/twistlock/commit/3c410523e2c154652a3564511bbc90fde0710bb3))
 - Make sure husky doesn't install on CI servers by [@kristof-mattei](https://github.com/kristof-mattei) ([`6908d84`](https://github.com/kristof-mattei/twistlock/commit/6908d84e175ffab99bd18227bcbd515e0020c778))
@@ -148,6 +177,7 @@
 - Forgot to put back line to add SHA to $env by [@kristof-mattei](https://github.com/kristof-mattei) ([`5e2a12a`](https://github.com/kristof-mattei/twistlock/commit/5e2a12a1eea0baa55a445077396f9468a1a16e3e))
 - --quiet isn't quiet by [@kristof-mattei](https://github.com/kristof-mattei) ([`764ef0a`](https://github.com/kristof-mattei/twistlock/commit/764ef0ab2140b0b80cf53b476ba6525b3a873b4e))
 - Initialize otherwise EXITCODE is not set on success, and then it still fails 😅 by [@kristof-mattei](https://github.com/kristof-mattei) ([`6658ea7`](https://github.com/kristof-mattei/twistlock/commit/6658ea7799a523b54b122ff6c8d5a33a18e2c7c6))
+- Fake commit by [@kristof-mattei](https://github.com/kristof-mattei) ([`80eec6e`](https://github.com/kristof-mattei/twistlock/commit/80eec6ed5bdf245ca071780face928adf95848f4))
 - Centralized names by [@kristof-mattei](https://github.com/kristof-mattei) ([`2e2345b`](https://github.com/kristof-mattei/twistlock/commit/2e2345b2f1337ed5c99dea090d94de2b4b932949))
 - Removed submodules, going direct by [@kristof-mattei](https://github.com/kristof-mattei) ([`2e2a71c`](https://github.com/kristof-mattei/twistlock/commit/2e2a71c68a23764369cf67dfc485c9a76372dad2))
 - Switched to fixed commits for actions by [@kristof-mattei](https://github.com/kristof-mattei) ([`2bd59a8`](https://github.com/kristof-mattei/twistlock/commit/2bd59a85d847c6cbe5ce39038e25666c99086674))
@@ -289,7 +319,11 @@
 - Initial clone by [@kristof-mattei](https://github.com/kristof-mattei) ([`a832e57`](https://github.com/kristof-mattei/twistlock/commit/a832e5770f8c312ceb54ef09251c2624b87d5014))
 - Update category by [@kristof-mattei](https://github.com/kristof-mattei) ([`14e6d75`](https://github.com/kristof-mattei/twistlock/commit/14e6d75744d22f26d661f6135b4dfedd8a9c82f9))
 - Set maximum backtrace by [@kristof-mattei](https://github.com/kristof-mattei) ([`cd44fe2`](https://github.com/kristof-mattei/twistlock/commit/cd44fe2ab070d930dea9b1040a5e57ec9276ed34))
+- Also do RUST_BACKTRACE=full for debugging by [@kristof-mattei](https://github.com/kristof-mattei) ([`fde9619`](https://github.com/kristof-mattei/twistlock/commit/fde9619668b4eb33ad41e0265c8ff5cae164001e))
+- Build all with tests too by [@kristof-mattei](https://github.com/kristof-mattei) ([`2fdf062`](https://github.com/kristof-mattei/twistlock/commit/2fdf062917c86c9ffebbd81b3b9bb8720aa841ef))
+- Trace for all, not just the app by [@kristof-mattei](https://github.com/kristof-mattei) ([`e92d8c0`](https://github.com/kristof-mattei/twistlock/commit/e92d8c04661c0a06a6932a701ba7fc4e0f731fc2))
 - Default is to use color-eyre by [@kristof-mattei](https://github.com/kristof-mattei) ([`9ec7951`](https://github.com/kristof-mattei/twistlock/commit/9ec795182352fc168b18cd5a9fd623b1930494f3))
+- Trace for run and test by [@kristof-mattei](https://github.com/kristof-mattei) ([`57bb0f1`](https://github.com/kristof-mattei/twistlock/commit/57bb0f18bcf3c360eca25ee5aeeb61ac37000d46))
 - Add update-name script by [@kristof-mattei](https://github.com/kristof-mattei) ([`57e5023`](https://github.com/kristof-mattei/twistlock/commit/57e502335d9e4f409054ed5ecfb7d1ad8ab1d2d9))
 - Coveralls as CodeCov keeps on failing by [@kristof-mattei](https://github.com/kristof-mattei) ([`fab1710`](https://github.com/kristof-mattei/twistlock/commit/fab171080b3de6c51c4bc7531699841534366f8a))
 - Specify version, Renovate will pin it by [@kristof-mattei](https://github.com/kristof-mattei) ([`2a44ecb`](https://github.com/kristof-mattei/twistlock/commit/2a44ecbc3cbca50f1fddaf65ec4633b762384ef1))
@@ -298,6 +332,7 @@
 - Get application name automatically by [@kristof-mattei](https://github.com/kristof-mattei) ([`5f71149`](https://github.com/kristof-mattei/twistlock/commit/5f71149c9c86a79155fe7180c8fc7e154febbca3))
 - Remove unneeded newline by [@kristof-mattei](https://github.com/kristof-mattei) ([`4a3fe57`](https://github.com/kristof-mattei/twistlock/commit/4a3fe575e0eb6d3a254a5041ccba662ddcbcbdcd))
 - We don't use .idea config by [@kristof-mattei](https://github.com/kristof-mattei) ([`4d22e96`](https://github.com/kristof-mattei/twistlock/commit/4d22e96241230cf0406dfc2cb3199b38acd2bad3))
+- Better defaults by [@kristof-mattei](https://github.com/kristof-mattei) ([`0c8b4a7`](https://github.com/kristof-mattei/twistlock/commit/0c8b4a74b7e969af7b5b696ba9300b0b6cd31a85))
 - Consolidate clippy & rust config on top of main, all the rest causes duplication by [@kristof-mattei](https://github.com/kristof-mattei) ([`e158e41`](https://github.com/kristof-mattei/twistlock/commit/e158e41a05171aadc4a36bed4f40685e9f15a8fc))
 - Don't show progress by [@kristof-mattei](https://github.com/kristof-mattei) ([`2be0887`](https://github.com/kristof-mattei/twistlock/commit/2be088747fc874dad816ed60d0e49dbf3390e0bb))
 - Workflow_dispatch does not take a branch by [@kristof-mattei](https://github.com/kristof-mattei) ([`7cb9b28`](https://github.com/kristof-mattei/twistlock/commit/7cb9b2833bc904c936e96cb57d091262d3246933))
@@ -386,7 +421,9 @@
 - Clean up build-cache as well, and run every day by [@kristof-mattei](https://github.com/kristof-mattei) ([`1d6a0a4`](https://github.com/kristof-mattei/twistlock/commit/1d6a0a4181be25b94c08af55da3d69f4c4846e69))
 - Also delete from build cache if expired (right now 30 days) by [@kristof-mattei](https://github.com/kristof-mattei) ([`70b2624`](https://github.com/kristof-mattei/twistlock/commit/70b2624ed0eae2e920c0a0733faa8b4531c85557))
 - Full version by [@kristof-mattei](https://github.com/kristof-mattei) ([`95902e1`](https://github.com/kristof-mattei/twistlock/commit/95902e1100aca1c5fc03d4c4b73e4fb6d12d7751))
+- Regenerate launch.json by [@kristof-mattei](https://github.com/kristof-mattei) ([`401c374`](https://github.com/kristof-mattei/twistlock/commit/401c374aacc2a2d46c65dad30537dace5f8f5849))
 - String_to_string is deprecated and fails in 1.91.0 by [@kristof-mattei](https://github.com/kristof-mattei) ([`ebfba18`](https://github.com/kristof-mattei/twistlock/commit/ebfba184701e819f7b0700d0e86b55c06f20c55c))
+- Regenerate launch.json by [@kristof-mattei](https://github.com/kristof-mattei) ([`bf8b4b3`](https://github.com/kristof-mattei/twistlock/commit/bf8b4b3d753ab0690b1670efa31370df4e837f94))
 - Update build_env by [@kristof-mattei](https://github.com/kristof-mattei) ([`75149fe`](https://github.com/kristof-mattei/twistlock/commit/75149fea98ba64e5679877bf4669c25ebdfac96a))
 - Limit amount of concurrent builds to reduce pressure by [@kristof-mattei](https://github.com/kristof-mattei) ([`8f67f94`](https://github.com/kristof-mattei/twistlock/commit/8f67f94909e191e8ba75a2d21f8d415d779ef5a5))
 - Retry final docker push by [@kristof-mattei](https://github.com/kristof-mattei) ([`c49e870`](https://github.com/kristof-mattei/twistlock/commit/c49e870692a536f7f261fb47ef14b1921aac16ab))
@@ -465,9 +502,12 @@
 
 ### 🧪 Testing
 
+- Sign with GPG signature by [@kristof-mattei](https://github.com/kristof-mattei) ([`979cd32`](https://github.com/kristof-mattei/twistlock/commit/979cd322c6433c7f9200ed36c0deb84ab02b0706))
+- Sign with GPG signature by [@kristof-mattei](https://github.com/kristof-mattei) ([`63d0aa2`](https://github.com/kristof-mattei/twistlock/commit/63d0aa281c26653cb62b1e7416fc047fe72c589a))
 - Flow by [@kristof-mattei](https://github.com/kristof-mattei) ([`9e940fb`](https://github.com/kristof-mattei/twistlock/commit/9e940fbe55fa07e3b24358b023720ba2d73d8c86))
 - Print changelog.md by [@kristof-mattei](https://github.com/kristof-mattei) ([`ce90089`](https://github.com/kristof-mattei/twistlock/commit/ce900894ee712c58c14955ec4bfa9b90b0c050e8))
 - Failure test by [@kristof-mattei](https://github.com/kristof-mattei) ([`fc23c01`](https://github.com/kristof-mattei/twistlock/commit/fc23c01aee19e787bf952f9ce9b2205e62ff15cc))
+- Trigger build by [@kristof-mattei](https://github.com/kristof-mattei) ([`8ea2267`](https://github.com/kristof-mattei/twistlock/commit/8ea226738eb615fce0abdffc37ef8cd01c6fabe6))
 
 ### ⚙️ Miscellaneous Tasks
 
@@ -567,8 +607,10 @@
 - Set nice name by [@kristof-mattei](https://github.com/kristof-mattei) ([`22f0bca`](https://github.com/kristof-mattei/twistlock/commit/22f0bcaf26b62359c2afd18cfad6fb280baf3d85))
 - Removed unneeded comments by [@kristof-mattei](https://github.com/kristof-mattei) ([`dca69dc`](https://github.com/kristof-mattei/twistlock/commit/dca69dc3ea2cbacb0a490e011c8c5a385ebf7c51))
 - Exclude rustfmt and cargo-fmt from the cache as rustup doesn't like that by [@kristof-mattei](https://github.com/kristof-mattei) ([`d95f77f`](https://github.com/kristof-mattei/twistlock/commit/d95f77ffd16ffa56db736e564928aa4726a7c224))
+- Use built-in rustup by [@kristof-mattei](https://github.com/kristof-mattei) ([`5a98432`](https://github.com/kristof-mattei/twistlock/commit/5a9843252f358198ac7b43bb06825052e7be3fa7))
 - Exclude rustfmt and cargo-fmt from the cache as rustup doesn't like that by [@kristof-mattei](https://github.com/kristof-mattei) ([`2c04592`](https://github.com/kristof-mattei/twistlock/commit/2c04592da28a24dc92b3f1025345654ed51d84cb))
 - Run prettier by [@kristof-mattei](https://github.com/kristof-mattei) ([`46ff0fb`](https://github.com/kristof-mattei/twistlock/commit/46ff0fb4c6b3f3509f42798b1b9adbd59617f0b4))
+- Don't clean before clippy, not needed by [@kristof-mattei](https://github.com/kristof-mattei) ([`253afc2`](https://github.com/kristof-mattei/twistlock/commit/253afc287d6ce9aafd9d906066a54410270ef80e))
 - Don't consider it 'all-done' when anything is cancelled by [@kristof-mattei](https://github.com/kristof-mattei) ([`4fdc19d`](https://github.com/kristof-mattei/twistlock/commit/4fdc19df0990801ebaf40f25fa955eb22f3f1946))
 - Also rebuild on cargo.lock changes by [@kristof-mattei](https://github.com/kristof-mattei) ([`b196ad4`](https://github.com/kristof-mattei/twistlock/commit/b196ad45b3b648f7588091e083df970f896b8185))
 - Updated npm packages by [@kristof-mattei](https://github.com/kristof-mattei) ([`79e5129`](https://github.com/kristof-mattei/twistlock/commit/79e5129e640c62201cc72d4807e3ff44a8ad2033))
@@ -581,7 +623,9 @@
 - Correctly report test failure by [@kristof-mattei](https://github.com/kristof-mattei) ([`6250142`](https://github.com/kristof-mattei/twistlock/commit/6250142008a5f74fad09c6088fa64ec87d5c49a5))
 - Also update cargo & toolchain by [@kristof-mattei](https://github.com/kristof-mattei) ([`291be2a`](https://github.com/kristof-mattei/twistlock/commit/291be2aa3dd1d15c726686b0dd71ff2e35bff341))
 - Fail done properly by [@kristof-mattei](https://github.com/kristof-mattei) ([`9a420bf`](https://github.com/kristof-mattei/twistlock/commit/9a420bf23ae315b64a7a0d20734de30db6ac01df))
+- Made task file rust-analyzer compliant by [@kristof-mattei](https://github.com/kristof-mattei) ([`6f244be`](https://github.com/kristof-mattei/twistlock/commit/6f244beea8c5c8232b66f51bb1dcd0d42759d223))
 - Spacing and remove verbose by [@kristof-mattei](https://github.com/kristof-mattei) ([`abceeeb`](https://github.com/kristof-mattei/twistlock/commit/abceeeb0e023cd1629df3540fe5f9d310b8dbd36))
+- Add release test script by [@kristof-mattei](https://github.com/kristof-mattei) ([`0918c90`](https://github.com/kristof-mattei/twistlock/commit/0918c90afafcb26396983767979f08dc46d5d7c0))
 - Consolidated extensions by [@kristof-mattei](https://github.com/kristof-mattei) ([`7ebc90c`](https://github.com/kristof-mattei/twistlock/commit/7ebc90c506e2570c0ec92145c4b4a6d23270c2cf))
 - Add title (name) to step by [@kristof-mattei](https://github.com/kristof-mattei) ([`8f4396d`](https://github.com/kristof-mattei/twistlock/commit/8f4396d247c865897e0088c6af23a54a0affef7c))
 - Docker images names should always be lowercase by [@kristof-mattei](https://github.com/kristof-mattei) ([`9932b72`](https://github.com/kristof-mattei/twistlock/commit/9932b72ad08d8a5eeacc0946b1fc367320c9e19f))
@@ -607,6 +651,7 @@
 - Restored codecov, remove executable modifier by [@kristof-mattei](https://github.com/kristof-mattei) ([`b45eb0f`](https://github.com/kristof-mattei/twistlock/commit/b45eb0f353f1928990d23fd54996ed97b70e1c61))
 - Disable coveralls & codecov by [@kristof-mattei](https://github.com/kristof-mattei) ([`c43c49a`](https://github.com/kristof-mattei/twistlock/commit/c43c49a500d053d5c1d2a5861a8ffa8d44281093))
 - Put versions so that renovate can tag correctly by [@kristof-mattei](https://github.com/kristof-mattei) ([`dce5fd5`](https://github.com/kristof-mattei/twistlock/commit/dce5fd57af8aa1a1a7722f4bfedc42e7be29a306))
+- Remove variable from dockerfile by [@kristof-mattei](https://github.com/kristof-mattei) ([`1a47885`](https://github.com/kristof-mattei/twistlock/commit/1a478854622fd3426534ebceac142ac2b633eaf5))
 - Try codecov again by [@kristof-mattei](https://github.com/kristof-mattei) ([`f53b8db`](https://github.com/kristof-mattei/twistlock/commit/f53b8dbce2882cfdbff917b4ee2261bc7fa47ad2))
 - Node v18 by [@kristof-mattei](https://github.com/kristof-mattei) ([`33b78ea`](https://github.com/kristof-mattei/twistlock/commit/33b78ea423dedd7d25bfc96395aa1f532347afa3))
 - Bump package-lock.json by [@kristof-mattei](https://github.com/kristof-mattei) ([`1e0d6eb`](https://github.com/kristof-mattei/twistlock/commit/1e0d6eb569c0928fc17eba447bf64a4fe6e4f809))
@@ -624,8 +669,12 @@
 - Pin mold by [@kristof-mattei](https://github.com/kristof-mattei) ([`6222e7a`](https://github.com/kristof-mattei/twistlock/commit/6222e7a5d096509d7b714b152c1dbfc4a5f32692))
 - Disable function-next-line formatting, it looks weird by [@kristof-mattei](https://github.com/kristof-mattei) ([`1eb4dd2`](https://github.com/kristof-mattei/twistlock/commit/1eb4dd2f28f2e6955ba36f09e464e6891b6d4c2c))
 - Rename nextversion to next_version by [@kristof-mattei](https://github.com/kristof-mattei) ([`4821da4`](https://github.com/kristof-mattei/twistlock/commit/4821da4b016aa974cffaf974c43165b504c1f125))
+- Ensure run and debug from main add the right LOG settings by [@kristof-mattei](https://github.com/kristof-mattei) ([`d271883`](https://github.com/kristof-mattei/twistlock/commit/d27188314fa89fdcac88034f612d5bce6a13bcb4))
+- Console isn't useful, updated casing of levels by [@kristof-mattei](https://github.com/kristof-mattei) ([`0cb31d5`](https://github.com/kristof-mattei/twistlock/commit/0cb31d5840aaf7672d71398a96e119fbc9d9a722))
 - No trailing commas in json by [@kristof-mattei](https://github.com/kristof-mattei) ([`a7b01be`](https://github.com/kristof-mattei/twistlock/commit/a7b01be89742c69a3a671fba6f674d7895cec524))
+- Use internal console, not the terminal for debugging by [@kristof-mattei](https://github.com/kristof-mattei) ([`33e467c`](https://github.com/kristof-mattei/twistlock/commit/33e467c0afbef21f88e46190f86ad01431cb41aa))
 - Fix startColumn/endColumn being 0. Is invalid. Normalize json file for diffing, ignore output. Diff is expected by [@kristof-mattei](https://github.com/kristof-mattei) ([`d37020f`](https://github.com/kristof-mattei/twistlock/commit/d37020fdd19bd9f2d7348fd7b9553dd0921afa6f))
+- Explicitely set prettierrc's path by [@kristof-mattei](https://github.com/kristof-mattei) ([`3787f7f`](https://github.com/kristof-mattei/twistlock/commit/3787f7f1842f1b72aad3ad93a86af660c438f138))
 - Align title by [@kristof-mattei](https://github.com/kristof-mattei) ([`0a560bf`](https://github.com/kristof-mattei/twistlock/commit/0a560bf62205abac716b75abe3a54d1776fbca81))
 - Checkout to satisfy the codeql tool by [@kristof-mattei](https://github.com/kristof-mattei) ([`d6f858a`](https://github.com/kristof-mattei/twistlock/commit/d6f858a3a1f026bb0c219e0dfdc199f3b3676af6))
 - Rename semgrep job to make it register with semgrep by [@kristof-mattei](https://github.com/kristof-mattei) ([`9720764`](https://github.com/kristof-mattei/twistlock/commit/9720764f82f17f202c8886bd638cf0faa36c4897))
@@ -684,6 +733,7 @@
 - Ignore generated changelog by [@kristof-mattei](https://github.com/kristof-mattei) ([`9084f3f`](https://github.com/kristof-mattei/twistlock/commit/9084f3fe60d2794d98ca6fff47428c169a8f3f80))
 - Clippy 1.86 fixes by [@kristof-mattei](https://github.com/kristof-mattei) ([`1ba9e82`](https://github.com/kristof-mattei/twistlock/commit/1ba9e82c8de2d8fd2ba93018639ec3683e95c9e6))
 - Disable required signatures by [@kristof-mattei](https://github.com/kristof-mattei) ([`445e425`](https://github.com/kristof-mattei/twistlock/commit/445e4253a7dcbe8fac577cdcaff328466590abe1))
+- Set default debug visualizer by [@kristof-mattei](https://github.com/kristof-mattei) ([`6941793`](https://github.com/kristof-mattei/twistlock/commit/69417931ad3e2506dbee9732bef5b1ef9649c885))
 - Update debug setup by [@kristof-mattei](https://github.com/kristof-mattei) ([`59756b7`](https://github.com/kristof-mattei/twistlock/commit/59756b712762276d2032290b7d24f3a9e900d059))
 - Change wording by [@kristof-mattei](https://github.com/kristof-mattei) ([`34fb4cf`](https://github.com/kristof-mattei/twistlock/commit/34fb4cf3eda6724b074e3ce877a733dfaf8780cf))
 - Formatting by [@kristof-mattei](https://github.com/kristof-mattei) ([`f3dde64`](https://github.com/kristof-mattei/twistlock/commit/f3dde6447ec7fc4eadd646da761b872e21fdd6a2))
@@ -739,6 +789,8 @@
 - Use musl all the way by [@kristof-mattei](https://github.com/kristof-mattei) ([`828d679`](https://github.com/kristof-mattei/twistlock/commit/828d67953e2be358e3565197feb91ec127cb2da2))
 - Remove lldb-prettifier built as part of repo, use shared config by [@kristof-mattei](https://github.com/kristof-mattei) ([`8a7e110`](https://github.com/kristof-mattei/twistlock/commit/8a7e110376c9a57b26a0a3ab9540b466394a8290))
 - Fmt by [@kristof-mattei](https://github.com/kristof-mattei) ([`3d4e946`](https://github.com/kristof-mattei/twistlock/commit/3d4e9462ada1800d8c22b210ba56ce28758770ec))
+- Remove submodule folder by [@kristof-mattei](https://github.com/kristof-mattei) ([`f6e5d3a`](https://github.com/kristof-mattei/twistlock/commit/f6e5d3a28c8efe2dcae9575945860a54e710d410))
+- Sort by [@kristof-mattei](https://github.com/kristof-mattei) ([`c757c8d`](https://github.com/kristof-mattei/twistlock/commit/c757c8de56467f6c8f45b8825684605c4435da47))
 - Typo by [@kristof-mattei](https://github.com/kristof-mattei) ([`cded012`](https://github.com/kristof-mattei/twistlock/commit/cded012f14f816d0e1878e4abf0225bbc22b5925))
 - Use slim-trixie instead of trixie by [@kristof-mattei](https://github.com/kristof-mattei) ([`ecd2b0e`](https://github.com/kristof-mattei/twistlock/commit/ecd2b0e978c392b1ed12726877de4e78f19980e7))
 - Cleanup by [@kristof-mattei](https://github.com/kristof-mattei) ([`fb181c3`](https://github.com/kristof-mattei/twistlock/commit/fb181c3e899c70d21a4d0081ebf2ddf44192012e))
@@ -770,6 +822,8 @@
 - Clean up ignore by [@kristof-mattei](https://github.com/kristof-mattei) ([`404a01e`](https://github.com/kristof-mattei/twistlock/commit/404a01e12c18e72240ce1f85a49ee6aa8fc9e403))
 - Rust 1.94.0 Docker by [@kristof-mattei](https://github.com/kristof-mattei) ([`9427eb1`](https://github.com/kristof-mattei/twistlock/commit/9427eb18b46bf01da1357e3d83312f0846aa42ae))
 - Pin sha for Rust image by [@kristof-mattei](https://github.com/kristof-mattei) ([`e2986db`](https://github.com/kristof-mattei/twistlock/commit/e2986db43914999be69f279056fd5be0908f7216))
+- Use trixie as dev image by [@kristof-mattei](https://github.com/kristof-mattei) ([`caa35f4`](https://github.com/kristof-mattei/twistlock/commit/caa35f407f67a6bf86e45f83735ec9a5d31df207))
+- Devcontainer mold by [@kristof-mattei](https://github.com/kristof-mattei) ([`d4a14c0`](https://github.com/kristof-mattei/twistlock/commit/d4a14c05f92ed61bad93d07ce0ab095b282d0111))
 - Skip more when releasing by [@kristof-mattei](https://github.com/kristof-mattei) ([`762a3bc`](https://github.com/kristof-mattei/twistlock/commit/762a3bcfe9b2c625e41b5020939e9bcdb3fb8815))
 - Lowercase variables by [@kristof-mattei](https://github.com/kristof-mattei) ([`dff26ac`](https://github.com/kristof-mattei/twistlock/commit/dff26ac37a1826cf3b57c9c848aba1a9de9e5d67))
 - Lowercase variables & path hygiene by [@kristof-mattei](https://github.com/kristof-mattei) ([`668015d`](https://github.com/kristof-mattei/twistlock/commit/668015dbabaf3cf2f2480896ed7737e4b8f7490c))
@@ -781,6 +835,7 @@
 - Remove test by [@kristof-mattei](https://github.com/kristof-mattei) ([`c73b6d6`](https://github.com/kristof-mattei/twistlock/commit/c73b6d6d7181b52e65b4e94f37bbde8ddeabac74))
 - Not needed by [@kristof-mattei](https://github.com/kristof-mattei) ([`e92df85`](https://github.com/kristof-mattei/twistlock/commit/e92df85de4a37e42e9774e6f983c27ebdf09b3c2))
 - Remove suprious newline by [@kristof-mattei](https://github.com/kristof-mattei) ([`be7faa7`](https://github.com/kristof-mattei/twistlock/commit/be7faa7228268d8f0b97fdb7348ac2a552e3c6c6))
+- Sort by [@kristof-mattei](https://github.com/kristof-mattei) ([`a8b16ab`](https://github.com/kristof-mattei/twistlock/commit/a8b16abc3b307557d1728ff6a5d6f8f217498382))
 - Move build cache by [@kristof-mattei](https://github.com/kristof-mattei) ([`0ab1328`](https://github.com/kristof-mattei/twistlock/commit/0ab1328687c12bf15ae3e21bb031a2d38632c4c8))
 - Rename by [@kristof-mattei](https://github.com/kristof-mattei) ([`6544b67`](https://github.com/kristof-mattei/twistlock/commit/6544b67f89b757a1a86986291fd1efef42f07445))
 - Stop skopeo from trying to infer type by [@kristof-mattei](https://github.com/kristof-mattei) ([`66ca282`](https://github.com/kristof-mattei/twistlock/commit/66ca282f0a4adcd2a4ee63f8ad69c9c822ac88ac))
