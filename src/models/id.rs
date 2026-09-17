@@ -1,3 +1,6 @@
+use std::convert::Infallible;
+use std::str::FromStr;
+
 use serde::Deserialize;
 
 fn short(id: &str) -> &str {
@@ -73,6 +76,14 @@ impl NetworkId {
 impl std::fmt::Display for NetworkId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(&self.0)
+    }
+}
+
+impl FromStr for NetworkId {
+    type Err = Infallible;
+
+    fn from_str(id: &str) -> Result<Self, Self::Err> {
+        Ok(Self::new(id))
     }
 }
 
