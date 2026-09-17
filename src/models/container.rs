@@ -5,6 +5,7 @@ use hashbrown::HashMap;
 use serde::de::{SeqAccess, Visitor};
 use serde::{Deserialize, Deserializer};
 
+use crate::filters::Status;
 use crate::models::deserializers::deserialize_empty_as_none;
 use crate::models::id::{ContainerId, NetworkId};
 
@@ -53,7 +54,7 @@ pub struct ContainerSummary {
     #[serde(deserialize_with = "deserialize_names")]
     #[serde(rename(deserialize = "Names"))]
     pub names: Box<[Box<str>]>,
-    pub state: Box<str>,
+    pub state: Status,
     pub labels: HashMap<Box<str>, Box<str>>,
     pub network_settings: ContainerSummaryNetworkSettings,
 }
@@ -111,6 +112,7 @@ mod tests {
     use hashbrown::HashMap;
     use pretty_assertions::assert_eq;
 
+    use crate::filters::Status;
     use crate::models::container::ContainerSummary;
     use crate::models::id::NetworkId;
 
@@ -132,7 +134,7 @@ mod tests {
         );
         assert_eq!(containers[0].names.len(), 1);
         assert_eq!(containers[0].names[0].as_ref(), "ubuntu");
-        assert_eq!(containers[0].state.as_ref(), "running");
+        assert_eq!(containers[0].state, Status::Running);
         assert_eq!(containers[0].labels, HashMap::new());
 
         assert_eq!(
@@ -141,7 +143,7 @@ mod tests {
         );
         assert_eq!(containers[1].names.len(), 1);
         assert_eq!(containers[1].names[0].as_ref(), "whoogle-search");
-        assert_eq!(containers[1].state.as_ref(), "running");
+        assert_eq!(containers[1].state, Status::Running);
         assert_eq!(containers[0].labels, HashMap::new());
     }
 
@@ -164,7 +166,7 @@ mod tests {
         assert_eq!(containers[0].names.len(), 2);
         assert_eq!(containers[0].names[0].as_ref(), "ubuntu-1");
         assert_eq!(containers[0].names[1].as_ref(), "ubuntu-2");
-        assert_eq!(containers[0].state.as_ref(), "running");
+        assert_eq!(containers[0].state, Status::Running);
         assert_eq!(containers[0].labels, HashMap::new());
     }
 
@@ -186,7 +188,7 @@ mod tests {
         );
         assert_eq!(containers[0].names.len(), 1);
         assert_eq!(containers[0].names[0].as_ref(), "ubuntu");
-        assert_eq!(containers[0].state.as_ref(), "running");
+        assert_eq!(containers[0].state, Status::Running);
         assert_eq!(
             containers[0].labels,
             HashMap::from_iter([("autoheal.stop.timeout".into(), "12".into())])
@@ -221,7 +223,7 @@ mod tests {
         );
         assert_eq!(containers[0].names.len(), 1);
         assert_eq!(containers[0].names[0].as_ref(), "ubuntu");
-        assert_eq!(containers[0].state.as_ref(), "running");
+        assert_eq!(containers[0].state, Status::Running);
         assert_eq!(
             containers[0].labels,
             HashMap::from_iter([("autoheal.stop.other_label".into(), "some_value".into())])
@@ -255,7 +257,7 @@ mod tests {
             "582036c7a5e8719bbbc9476e4216bfaf4fd318b61723f41f2e8fe3b60d8182ae"
         );
         assert_eq!(containers[0].names.len(), 0);
-        assert_eq!(containers[0].state.as_ref(), "running");
+        assert_eq!(containers[0].state, Status::Running);
         assert_eq!(
             containers[0].labels,
             HashMap::from_iter([("autoheal.stop.other_label".into(), "some_value".into())])
@@ -281,7 +283,7 @@ mod tests {
         assert_eq!(containers[0].names.len(), 2);
         assert_eq!(containers[0].names[0].as_ref(), "ubuntu-1");
         assert_eq!(containers[0].names[1].as_ref(), "ubuntu-2");
-        assert_eq!(containers[0].state.as_ref(), "running");
+        assert_eq!(containers[0].state, Status::Running);
         assert_eq!(containers[0].labels, HashMap::new());
     }
 
@@ -319,6 +321,39 @@ mod tests {
         let network = &containers[0].network_settings.networks["some-net"];
 
         assert_eq!(network.network_id, None);
+    }
+
+    #[test]
+    fn container_summary_parses_every_state() {
+        for (state, expected) in [
+            ("created", Status::Created),
+            ("restarting", Status::Restarting),
+            ("running", Status::Running),
+            ("removing", Status::Removing),
+            ("paused", Status::Paused),
+            ("exited", Status::Exited),
+            ("dead", Status::Dead),
+        ] {
+            let input = format!(
+                r#"[{{"Id":"582036c7a5e8","Names":["/ubuntu"],"Labels":{{}},"State":"{}","NetworkSettings":{{"Networks":{{}}}}}}]"#,
+                state
+            );
+
+            let containers: Vec<ContainerSummary> =
+                serde_json::from_slice(input.as_bytes()).unwrap();
+
+            assert_eq!(containers[0].state, expected);
+        }
+    }
+
+    #[test]
+    fn container_summary_rejects_an_unknown_state() {
+        let input = r#"[{"Id":"582036c7a5e8","Names":["/ubuntu"],"Labels":{},"State":"hibernating","NetworkSettings":{"Networks":{}}}]"#;
+
+        let deserialized: Result<Vec<ContainerSummary>, _> =
+            serde_json::from_slice(input.as_bytes());
+
+        deserialized.unwrap_err();
     }
 
     #[test]
