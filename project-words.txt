@@ -8,7 +8,6 @@ buildcache
 cinstrument
 cliffignore
 ctarget
-cves
 docsrs
 dorny
 dtrue
@@ -29,7 +28,6 @@ netns
 nextest
 oras
 pathbuf
-photoprism
 pkgs
 postprocessors
 prereleased
