@@ -1,4 +1,25 @@
 <!-- header goes here -->
+## [0.7.0](https://github.com/kristof-mattei/twistlock/compare/v0.6.0..v0.7.0) - 2026-09-18
+
+### 🚀 Features
+
+- *(filters)* [**breaking**] Add the `isolation` filter by [@kristof-mattei](https://github.com/kristof-mattei) ([`a6d15db`](https://github.com/kristof-mattei/twistlock/commit/a6d15dbcfd0dcb0af786ce5049d1fa6024924a47))
+
+### 🐛 Bug Fixes
+
+- *(endpoints)* Send `all=true` for an `exited` filter by [@kristof-mattei](https://github.com/kristof-mattei) ([`12f1827`](https://github.com/kristof-mattei/twistlock/commit/12f1827d1f82ff310888497de4f4e513042f1e50))
+
+### 🚜 Refactor
+
+- *(filters)* Rename the `Display` binding `s` to `value` by [@kristof-mattei](https://github.com/kristof-mattei) ([`eb76d47`](https://github.com/kristof-mattei/twistlock/commit/eb76d47d4c51d8e2581ed69d5f3961ef20b6780d))
+
+### 🧪 Testing
+
+- *(client)* Cover an event stream ended by the daemon by [@kristof-mattei](https://github.com/kristof-mattei) ([`43c5476`](https://github.com/kristof-mattei/twistlock/commit/43c5476c7ad4369bcd2a64fd230195c66dc7c062))
+
+### ⚙️ Miscellaneous Tasks
+
+- *(codeql)* Install mold before the Rust analysis by [@kristof-mattei](https://github.com/kristof-mattei) ([`57ea65e`](https://github.com/kristof-mattei/twistlock/commit/57ea65e196db2aa5643351b8f5de254ad035cba6))
 ## [0.6.0](https://github.com/kristof-mattei/twistlock/compare/v0.5.0..v0.6.0) - 2026-09-18
 
 ### 🚀 Features
