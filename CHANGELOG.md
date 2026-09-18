@@ -1,4 +1,17 @@
 <!-- header goes here -->
+## [0.6.0](https://github.com/kristof-mattei/twistlock/compare/v0.5.0..v0.6.0) - 2026-09-18
+
+### 🚀 Features
+
+- *(models)* [**breaking**] Type `ContainerSummary::state` as `Status` by [@kristof-mattei](https://github.com/kristof-mattei) ([`40a09d8`](https://github.com/kristof-mattei/twistlock/commit/40a09d83c8e7674128b0f884bc10fa8ec93a0998))
+
+### 🐛 Bug Fixes
+
+- *(client)* Return a failed frame read from `produce_events` by [@kristof-mattei](https://github.com/kristof-mattei) ([`1598313`](https://github.com/kristof-mattei/twistlock/commit/15983133d73cea777a0df07ee140164328c57544))
+
+### 🚜 Refactor
+
+- *(models)* [**breaking**] Remove `EventBody::scope` and `EventScope` by [@kristof-mattei](https://github.com/kristof-mattei) ([`b3866e8`](https://github.com/kristof-mattei/twistlock/commit/b3866e8ab0d727ef44190f69e204c5dbb4be4979))
 ## [0.5.0](https://github.com/kristof-mattei/twistlock/compare/v0.4.0..v0.5.0) - 2026-09-17
 
 ### 🚀 Features
