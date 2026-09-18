@@ -19,7 +19,15 @@ impl ApiEndpoint for ListContainers {
     const METHOD: Method = Method::GET;
 
     fn path_and_query(request: &Self::Request<'_>) -> Result<String, std::io::Error> {
-        Ok(format!("/containers/json?filters={}", url_encode(request)?))
+        // an `exited` filter matches nothing without `all`
+        // https://docs.docker.com/reference/cli/docker/container/ls/#filter:~:text=exited
+        let all = request.exited.is_some();
+
+        Ok(format!(
+            "/containers/json?all={}&filters={}",
+            all,
+            url_encode(request)?
+        ))
     }
 }
 
@@ -74,10 +82,31 @@ mod tests {
     use crate::client::url_encode;
     use crate::endpoint::ApiEndpoint as _;
     use crate::endpoints::containers::{
-        InspectContainer, RestartContainer, RestartContainerRequest,
+        InspectContainer, ListContainers, RestartContainer, RestartContainerRequest,
     };
     use crate::filters::{Filters, Health, Status};
     use crate::models::id::{ContainerId, ContainerRef};
+
+    #[test]
+    fn list_containers_path_excludes_stopped_containers() {
+        assert_eq!(
+            ListContainers::path_and_query(&Filters::default()).unwrap(),
+            "/containers/json?all=false&filters=%7B%7D"
+        );
+    }
+
+    #[test]
+    fn list_containers_path_with_exit_code_includes_stopped_containers() {
+        let exit_code_3 = Filters {
+            exited: Some(HashSet::from_iter([3])),
+            ..Filters::default()
+        };
+
+        assert_eq!(
+            ListContainers::path_and_query(&exit_code_3).unwrap(),
+            "/containers/json?all=true&filters=%7B%22exited%22%3A%5B%223%22%5D%7D"
+        );
+    }
 
     #[test]
     fn inspect_container_path_from_id() {
