@@ -84,7 +84,7 @@ mod tests {
     use crate::endpoints::containers::{
         InspectContainer, ListContainers, RestartContainer, RestartContainerRequest,
     };
-    use crate::filters::{Filters, Health, Status};
+    use crate::filters::{Filters, Health, Isolation, Status};
     use crate::models::id::{ContainerId, ContainerRef};
 
     #[test]
@@ -184,5 +184,20 @@ mod tests {
         let exited_encoded = url_encode(&exited).unwrap();
 
         assert_eq!(&*exited_encoded, "%7B%22status%22%3A%5B%22exited%22%5D%7D");
+    }
+
+    #[test]
+    fn build_decode_isolation() {
+        let hyperv = Filters {
+            isolation: Some(HashSet::from_iter([Isolation::HyperV])),
+            ..Filters::default()
+        };
+
+        let hyperv_encoded = url_encode(&hyperv).unwrap();
+
+        assert_eq!(
+            &*hyperv_encoded,
+            "%7B%22isolation%22%3A%5B%22hyperv%22%5D%7D"
+        );
     }
 }

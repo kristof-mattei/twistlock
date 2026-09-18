@@ -126,6 +126,25 @@ impl std::fmt::Display for Health {
     }
 }
 
+#[derive(Eq, PartialEq, Hash)]
+pub enum Isolation {
+    Default,
+    Process,
+    HyperV,
+}
+
+impl std::fmt::Display for Isolation {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = match *self {
+            Isolation::Default => "default",
+            Isolation::Process => "process",
+            Isolation::HyperV => "hyperv",
+        };
+
+        f.write_str(s)
+    }
+}
+
 // ancestor=(<image-name>[:<tag>], <image id>, or <image@digest>)
 // before=(<container id> or <container name>)
 // expose=(<port>[/<proto>]|<startport-endport>/[<proto>])
@@ -307,7 +326,15 @@ pub struct Filters {
     // alias of `publish`
     // expose=(<port>[/<proto>]|<startport-endport>/[<proto>])
     // expose: Option<HashSet<Box<str>>>,
-
-    // TODO
+    #[serde(
+        serialize_with = "multiple_to_string_array",
+        skip_serializing_if = "Option::is_none"
+    )]
+    /// Container isolation, multiple values means containers with `IsolationA OR IsolationB`.
+    ///
+    /// Notes:
+    /// * Does not include exited containers by default.
+    /// * Windows daemon only.
     // isolation=(default|process|hyperv) (Windows daemon only)
+    pub isolation: Option<HashSet<Isolation>>,
 }
