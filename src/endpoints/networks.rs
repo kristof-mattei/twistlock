@@ -34,7 +34,7 @@ impl ApiEndpoint for InspectNetwork {
 
 #[cfg(test)]
 mod tests {
-    use pretty_assertions::assert_eq;
+    use pretty_assertions::assert_matches;
 
     use crate::endpoint::ApiEndpoint as _;
     use crate::endpoints::networks::InspectNetwork;
@@ -44,9 +44,9 @@ mod tests {
     fn inspect_network_path_from_id() {
         let id = NetworkId::new("88cad55e9ed7");
 
-        assert_eq!(
-            InspectNetwork::path_and_query(&NetworkRef::Id(&id)).unwrap(),
-            "/networks/88cad55e9ed7"
+        assert_matches!(
+            InspectNetwork::path_and_query(&NetworkRef::Id(&id)).as_deref(),
+            Ok("/networks/88cad55e9ed7")
         );
     }
 }

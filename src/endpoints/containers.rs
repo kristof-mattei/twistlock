@@ -77,7 +77,7 @@ mod tests {
     use std::time::Duration;
 
     use hashbrown::{HashMap, HashSet};
-    use pretty_assertions::assert_eq;
+    use pretty_assertions::{assert_eq, assert_matches};
 
     use crate::client::url_encode;
     use crate::endpoint::ApiEndpoint as _;
@@ -89,9 +89,9 @@ mod tests {
 
     #[test]
     fn list_containers_path_excludes_stopped_containers() {
-        assert_eq!(
-            ListContainers::path_and_query(&Filters::default()).unwrap(),
-            "/containers/json?all=false&filters=%7B%7D"
+        assert_matches!(
+            ListContainers::path_and_query(&Filters::default()).as_deref(),
+            Ok("/containers/json?all=false&filters=%7B%7D")
         );
     }
 
@@ -102,9 +102,9 @@ mod tests {
             ..Filters::default()
         };
 
-        assert_eq!(
-            ListContainers::path_and_query(&exit_code_3).unwrap(),
-            "/containers/json?all=true&filters=%7B%22exited%22%3A%5B%223%22%5D%7D"
+        assert_matches!(
+            ListContainers::path_and_query(&exit_code_3).as_deref(),
+            Ok("/containers/json?all=true&filters=%7B%22exited%22%3A%5B%223%22%5D%7D")
         );
     }
 
@@ -112,17 +112,17 @@ mod tests {
     fn inspect_container_path_from_id() {
         let id = ContainerId::new("0f9fc026ac74");
 
-        assert_eq!(
-            InspectContainer::path_and_query(&ContainerRef::Id(&id)).unwrap(),
-            "/containers/0f9fc026ac74/json"
+        assert_matches!(
+            InspectContainer::path_and_query(&ContainerRef::Id(&id)).as_deref(),
+            Ok("/containers/0f9fc026ac74/json")
         );
     }
 
     #[test]
     fn inspect_container_path_from_name() {
-        assert_eq!(
-            InspectContainer::path_and_query(&ContainerRef::IdOrName("ubuntu")).unwrap(),
-            "/containers/ubuntu/json"
+        assert_matches!(
+            InspectContainer::path_and_query(&ContainerRef::IdOrName("ubuntu")).as_deref(),
+            Ok("/containers/ubuntu/json")
         );
     }
 
@@ -133,9 +133,9 @@ mod tests {
             timeout: Duration::from_secs(12),
         };
 
-        assert_eq!(
-            RestartContainer::path_and_query(&request).unwrap(),
-            "/containers/ubuntu/restart?t=12"
+        assert_matches!(
+            RestartContainer::path_and_query(&request).as_deref(),
+            Ok("/containers/ubuntu/restart?t=12")
         );
     }
 

@@ -50,7 +50,7 @@ tracing = "0.1.44"
 hyper-unix-socket = "0.6.1"
 
 [dev-dependencies]
-pretty_assertions = "=1.4.1"
+pretty_assertions = { version = "=1.4.1", features = ["unstable"] }
 
 [package.metadata.cargo-machete]
 ignored = []
