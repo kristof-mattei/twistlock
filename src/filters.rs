@@ -144,7 +144,6 @@ impl std::fmt::Display for Health {
 // most members support supports `null` and `[]`, but in general we omit them when empty.
 // Notable exception: `is_task`.
 // with no `status` filter the endpoint returns `running`, `paused` and `restarting` containers.
-// If you want to see e.g. `exited=["1"]` you have to manually include a `status=["exited"]`...
 #[derive(Serialize, Default)]
 pub struct Filters {
     #[serde(
@@ -175,9 +174,7 @@ pub struct Filters {
     /// Filter by container exit code.
     ///
     /// Notes:
-    /// * Does not include exited containers by default.
-    ///
-    /// TODO: This has NO effect if `Status::Exited` is NOT included in `status`.
+    /// * Matches only stopped containers.
     // exited=<int> containers with exit code of <int>
     pub exited: Option<HashSet<i32>>,
 
