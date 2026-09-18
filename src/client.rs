@@ -389,7 +389,6 @@ impl Client {
                     return Err(eyre::Report::new(error).wrap_err("Failed to read frame"));
                 },
                 None => {
-                    // TODO is this correct? If the server stops?
                     return Err(eyre::Report::msg("No more next frame, other side gone"));
                 },
             };
@@ -441,6 +440,7 @@ mod tests {
     use std::pin::Pin;
     use std::task::{Context, Poll};
 
+    use http_body_util::Empty;
     use hyper::body::{Body, Bytes, Frame};
     use pretty_assertions::assert_eq;
     use tokio_util::sync::CancellationToken;
@@ -477,6 +477,18 @@ mod tests {
 
         assert_eq!(error.to_string(), "Failed to read frame");
         assert_eq!(error.root_cause().to_string(), "connection reset");
+    }
+
+    #[tokio::test]
+    async fn ended_stream_is_an_error() {
+        let (sender, _receiver) = tokio::sync::mpsc::channel(1);
+
+        let error =
+            Client::forward_events(Empty::<Bytes>::new(), &sender, &CancellationToken::new())
+                .await
+                .unwrap_err();
+
+        assert_eq!(error.to_string(), "No more next frame, other side gone");
     }
 
     #[tokio::test]
