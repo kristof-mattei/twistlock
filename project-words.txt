@@ -23,6 +23,7 @@ kristof
 lintian
 mattei
 monomorphization
+msvc
 multiplatform
 netns
 nextest
