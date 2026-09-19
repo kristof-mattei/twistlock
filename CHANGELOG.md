@@ -1,5 +1,10 @@
 <!-- header goes here -->
-## [0.7.0](https://github.com/kristof-mattei/twistlock/compare/v0.6.0..v0.7.0) - 2026-09-18
+## [0.7.1](https://github.com/kristof-mattei/twistlock/compare/v0.7.0..v0.7.1) - 2026-09-19
+
+### ⚙️ Miscellaneous Tasks
+
+- *(package)* Stop publishing the Docker API captures by [@kristof-mattei](https://github.com/kristof-mattei) ([`a5c8c53`](https://github.com/kristof-mattei/twistlock/commit/a5c8c536f76abde0821b78c1bce3e0367d5f81f1))
+## [0.7.0](https://github.com/kristof-mattei/twistlock/compare/v0.6.0..v0.7.0) - 2026-09-19
 
 ### 🚀 Features
 
