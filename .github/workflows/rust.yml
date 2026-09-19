@@ -11,7 +11,8 @@ env:
   CARGO_FEATURES: --all-features
   CARGO_INCREMENTAL: "0"
   CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_RUSTFLAGS: --deny=warnings
-  # `RUSTFLAGS` would replace the rustflags in `.cargo/config.toml`, this is joined with them
+  # `RUSTFLAGS` replaces the rustflags in `.cargo/config.toml`, so it cannot be used here
+  # https://doc.rust-lang.org/cargo/reference/config.html#buildrustflags
   CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS: --deny=warnings
   CARGO_TERM_COLOR: always
   RUSTC_WRAPPER: "sccache"
