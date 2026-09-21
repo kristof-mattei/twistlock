@@ -8,6 +8,7 @@ buildcache
 cinstrument
 cliffignore
 ctarget
+deque
 docsrs
 dorny
 dtrue
