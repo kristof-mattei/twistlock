@@ -180,6 +180,14 @@ impl Client {
         Ok(daemon)
     }
 
+    async fn read_body(&self, response: Response<Incoming>) -> Result<Bytes, TransportError> {
+        match timeout(self.docker_timeout, response.collect()).await {
+            Ok(Ok(collected)) => Ok(collected.to_bytes()),
+            Ok(Err(error)) => Err(TransportError::Body(error)),
+            Err(_elapsed) => Err(TransportError::Timeout),
+        }
+    }
+
     async fn send_request<TError>(
         &self,
         path_and_query: &str,
@@ -211,11 +219,7 @@ impl Client {
             return Ok(response);
         }
 
-        let bytes = response
-            .collect()
-            .await
-            .map_err(TransportError::Body)?
-            .to_bytes();
+        let bytes = self.read_body(response).await?;
 
         if let Ok(typed_err) = serde_json::from_slice::<TError>(&bytes) {
             return Err(ApiEndpointCallError::Typed(typed_err));
@@ -255,11 +259,7 @@ impl Client {
             .send_request::<E::Error>(&path_and_query, E::METHOD)
             .await?;
 
-        let bytes = response
-            .collect()
-            .await
-            .map_err(TransportError::Body)?
-            .to_bytes();
+        let bytes = self.read_body(response).await?;
 
         E::parse_response(&bytes).map_err(|error| {
             event!(Level::ERROR, ?error, message = %String::from_utf8_lossy(&bytes), "Failed to deserialize response");
@@ -469,7 +469,8 @@ mod tests {
 
     use crate::client::{Client, EventLines, EventStreamError};
     use crate::config::Endpoint;
-    use crate::endpoint::ApiEndpointCallError;
+    use crate::endpoint::{ApiEndpointCallError, TransportError};
+    use crate::filters::Filters;
     use crate::models::events::{Event, EventDecodeError};
 
     struct FailingBody(Option<std::io::Error>);
@@ -619,6 +620,13 @@ mod tests {
 
     /// A dropped sender closes the connection.
     fn serve(head: &'static str) -> (Client, std::sync::mpsc::Sender<String>) {
+        serve_with_timeout(head, Duration::from_secs(5))
+    }
+
+    fn serve_with_timeout(
+        head: &'static str,
+        docker_timeout: Duration,
+    ) -> (Client, std::sync::mpsc::Sender<String>) {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let address = listener.local_addr().unwrap();
         let (body_sender, body_receiver) = std::sync::mpsc::channel::<String>();
@@ -642,9 +650,26 @@ mod tests {
         });
 
         let endpoint = Endpoint::from_str(&format!("tcp://{}", address)).unwrap();
-        let client = Client::build(endpoint, None, None, Duration::from_secs(5)).unwrap();
+        let client = Client::build(endpoint, None, None, docker_timeout).unwrap();
 
         (client, body_sender)
+    }
+
+    #[tokio::test]
+    async fn unsent_body_is_a_timeout() {
+        // the head announces 5 bytes, and the connection stays open without them
+        let (client, _body) = serve_with_timeout(
+            "HTTP/1.1 200 OK\r\ncontent-length: 5\r\n\r\n",
+            Duration::from_millis(100),
+        );
+
+        let Err(ApiEndpointCallError::Transport(error)) =
+            client.list_containers(&Filters::default()).await
+        else {
+            panic!("not a transport error");
+        };
+
+        assert!(matches!(error, TransportError::Timeout));
     }
 
     #[tokio::test]
