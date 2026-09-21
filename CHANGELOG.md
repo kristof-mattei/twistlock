@@ -1,5 +1,22 @@
 <!-- header goes here -->
-## [0.7.0](https://github.com/kristof-mattei/twistlock/compare/v0.6.0..v0.7.0) - 2026-09-18
+## [0.8.0](https://github.com/kristof-mattei/twistlock/compare/v0.7.0..v0.8.0) - 2026-09-21
+
+### 🚀 Features
+
+- *(client)* [**breaking**] Replace `produce_events` with a pull-based `EventSubscription` by [@kristof-mattei](https://github.com/kristof-mattei) ([`613ba6e`](https://github.com/kristof-mattei/twistlock/commit/613ba6ea42174abe1a6be8906c370d0a251a4016))
+- [**breaking**] Return typed errors instead of `eyre::Report` by [@kristof-mattei](https://github.com/kristof-mattei) ([`f571219`](https://github.com/kristof-mattei/twistlock/commit/f57121917ae2150b8441c8115ccb0d6cebb1265e))
+
+### 🐛 Bug Fixes
+
+- *(client)* Return an unsuccessful response as an error from `send_request` by [@kristof-mattei](https://github.com/kristof-mattei) ([`e45fd1c`](https://github.com/kristof-mattei/twistlock/commit/e45fd1ca095ca2911b7e36c7b595c7da23a88111))
+- *(client)* Read a response body under the client timeout by [@kristof-mattei](https://github.com/kristof-mattei) ([`f89af5c`](https://github.com/kristof-mattei/twistlock/commit/f89af5ce5a62f265685b77d957e8ae5f28784d8e))
+
+### ⚙️ Miscellaneous Tasks
+
+- *(package)* Stop publishing the Docker API captures by [@kristof-mattei](https://github.com/kristof-mattei) ([`a5c8c53`](https://github.com/kristof-mattei/twistlock/commit/a5c8c536f76abde0821b78c1bce3e0367d5f81f1))
+- Build and test against the declared minimal versions by [@kristof-mattei](https://github.com/kristof-mattei) ([`29429b8`](https://github.com/kristof-mattei/twistlock/commit/29429b8b3039657eb88c076900ee260d0ec6c148))
+- Check the public API of a pull request with `cargo semver-checks` by [@kristof-mattei](https://github.com/kristof-mattei) ([`51480b7`](https://github.com/kristof-mattei/twistlock/commit/51480b7ca5b4631890a19d17164b9c62d16ac012))
+## [0.7.0](https://github.com/kristof-mattei/twistlock/compare/v0.6.0..v0.7.0) - 2026-09-19
 
 ### 🚀 Features
 
