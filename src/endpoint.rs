@@ -1,8 +1,19 @@
-use color_eyre::eyre;
 use http::StatusCode;
 use hyper::Method;
 use serde::de::DeserializeOwned;
 use thiserror::Error;
+
+#[derive(Debug, Error)]
+pub enum TransportError {
+    #[error("Failed to build the request")]
+    Build(#[source] http::Error),
+    #[error("Failed to send the request")]
+    Send(#[source] hyper_util::client::legacy::Error),
+    #[error("The daemon did not answer in time")]
+    Timeout,
+    #[error("Failed to read the response body")]
+    Body(#[source] hyper::Error),
+}
 
 /// Error type for endpoint calls.
 #[derive(Debug, Error)]
@@ -19,9 +30,12 @@ where
     /// Non-success status, body was not valid JSON.
     #[error("HTTP error: {status}, body: {body}")]
     HttpError { status: StatusCode, body: String },
-    /// Transport or serialization failure.
-    #[error("{0}")]
-    Transport(eyre::Report),
+    #[error("Failed to serialize the request parameters")]
+    Query(#[source] std::io::Error),
+    #[error(transparent)]
+    Transport(#[from] TransportError),
+    #[error("Failed to deserialize the response")]
+    Deserialize(#[source] serde_json::Error),
 }
 
 /// A typed Docker API endpoint.
