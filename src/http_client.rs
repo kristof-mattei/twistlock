@@ -1,7 +1,6 @@
 use std::convert::Into;
 use std::str::FromStr as _;
 
-use color_eyre::eyre;
 use hashbrown::HashMap;
 use http_body_util::Empty;
 use hyper::body::{Body, Bytes};
@@ -17,7 +16,7 @@ pub(crate) fn build_request<B>(
     base: Uri,
     path_and_query: &str,
     method: Method,
-) -> Result<Request<B>, eyre::Report>
+) -> Result<Request<B>, http::Error>
 where
     B: Body + Send + 'static + Default,
     B::Data: Send,
@@ -38,7 +37,7 @@ pub(crate) fn build_request_with_body<B>(
     path_and_query: &str,
     method: Method,
     body: B,
-) -> Result<Request<B>, eyre::Report>
+) -> Result<Request<B>, http::Error>
 where
     B: Body + Send + 'static,
     B::Data: Send,
@@ -59,7 +58,7 @@ pub(crate) fn build_request_with_headers<K>(
     path_and_query: &str,
     headers: HashMap<K, HeaderValue>,
     method: Method,
-) -> Result<Request<Empty<Bytes>>, eyre::Report>
+) -> Result<Request<Empty<Bytes>>, http::Error>
 where
     K: IntoHeaderName,
 {
@@ -78,7 +77,7 @@ pub(crate) fn build_request_with_headers_and_body<B, K>(
     headers: HashMap<K, HeaderValue>,
     method: Method,
     body: B,
-) -> Result<Request<B>, eyre::Report>
+) -> Result<Request<B>, http::Error>
 where
     B: Body + Send + 'static,
     B::Data: Send,
@@ -130,7 +129,7 @@ where
     Ok(response)
 }
 
-fn build_uri(base_url: Uri, path_and_query: &str) -> Result<Uri, eyre::Report> {
+fn build_uri(base_url: Uri, path_and_query: &str) -> Result<Uri, http::Error> {
     let mut parts = base_url.into_parts();
 
     parts.path_and_query = Some(PathAndQuery::from_str(path_and_query)?);

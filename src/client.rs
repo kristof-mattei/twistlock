@@ -1,7 +1,6 @@
 use std::path::PathBuf;
 use std::time::Duration;
 
-use color_eyre::eyre;
 use http_body_util::{BodyExt as _, Full};
 use hyper::body::{Body, Bytes, Incoming};
 use hyper::{Method, Response};
@@ -11,7 +10,7 @@ use hyper_unix_socket::UnixSocketConnector;
 use hyper_util::client::legacy::Client as HttpClient;
 use hyper_util::client::legacy::connect::HttpConnector;
 use rustls::client::ClientConfig;
-use rustls::pki_types::pem::PemObject as _;
+use rustls::pki_types::pem::{Error as PemError, PemObject as _};
 use rustls::pki_types::{CertificateDer, DnsName, PrivateKeyDer, ServerName};
 use rustls::{DEFAULT_VERSIONS, RootCertStore};
 use serde::Serialize;
@@ -21,7 +20,7 @@ use tokio::time::timeout;
 use tracing::{Level, event};
 
 use crate::config::Endpoint as ConfigEndpoint;
-use crate::endpoint::{ApiEndpoint, ApiEndpointCallError};
+use crate::endpoint::{ApiEndpoint, ApiEndpointCallError, TransportError};
 use crate::endpoints::containers::{
     InspectContainer, ListContainers, RestartContainer, RestartContainerRequest,
 };
@@ -53,7 +52,15 @@ struct ClientCredentials {
     certs: Vec<CertificateDer<'static>>,
 }
 
-fn build_root_cert_store(cacert: Option<PathBuf>) -> Result<RootCertStore, eyre::Report> {
+#[derive(Debug, Error)]
+pub enum BuildError {
+    #[error("Failed to read a PEM file")]
+    Pem(#[from] PemError),
+    #[error("Failed to build the TLS configuration")]
+    Tls(#[from] rustls::Error),
+}
+
+fn build_root_cert_store(cacert: Option<PathBuf>) -> Result<RootCertStore, BuildError> {
     let mut store = RootCertStore::empty();
 
     if let Some(cacert) = cacert {
@@ -116,11 +123,11 @@ impl Client {
         cacert: Option<PathBuf>,
         client_credentials: Option<ClientCredentialPaths>,
         timeout: Duration,
-    ) -> Result<Client, eyre::Report> {
+    ) -> Result<Client, BuildError> {
         let daemon = match endpoint {
             ConfigEndpoint::Direct(url) => {
                 let client_credentials = client_credentials
-                    .map(|paths| -> Result<ClientCredentials, eyre::Report> {
+                    .map(|paths| -> Result<ClientCredentials, BuildError> {
                         Ok(ClientCredentials {
                             key: PrivateKeyDer::from_pem_file(paths.key)?,
                             certs: CertificateDer::pem_file_iter(paths.cert)?
@@ -182,31 +189,21 @@ impl Client {
         TError: DeserializeOwned + std::fmt::Debug,
     {
         let request = build_request(self.uri.clone(), path_and_query, method)
-            .map_err(ApiEndpointCallError::Transport)?;
+            .map_err(TransportError::Build)?;
 
-        let response: Result<Response<Incoming>, eyre::Report> = match self.endpoint {
+        let response = match self.endpoint {
             DockerEndpoint::Tls(ref client) => {
-                let response = execute_request(client, request);
-
-                match timeout(self.docker_timeout, response).await {
-                    Ok(Ok(response)) => Ok(response),
-                    Ok(Err(error)) => Err(error.into()),
-                    Err(error) => Err(error.into()),
-                }
+                timeout(self.docker_timeout, execute_request(client, request)).await
             },
             #[cfg(not(windows))]
             DockerEndpoint::Socket(ref client) => {
-                let response = execute_request(client, request);
-
-                match timeout(self.docker_timeout, response).await {
-                    Ok(Ok(response)) => Ok(response),
-                    Ok(Err(error)) => Err(error.into()),
-                    Err(error) => Err(error.into()),
-                }
+                timeout(self.docker_timeout, execute_request(client, request)).await
             },
         };
 
-        let response = response.map_err(ApiEndpointCallError::Transport)?;
+        let response = response
+            .map_err(|_elapsed| TransportError::Timeout)?
+            .map_err(TransportError::Send)?;
 
         let status_code = response.status();
 
@@ -217,7 +214,7 @@ impl Client {
         let bytes = response
             .collect()
             .await
-            .map_err(|error| ApiEndpointCallError::Transport(error.into()))?
+            .map_err(TransportError::Body)?
             .to_bytes();
 
         if let Ok(typed_err) = serde_json::from_slice::<TError>(&bytes) {
@@ -252,8 +249,7 @@ impl Client {
         &self,
         request: &E::Request<'_>,
     ) -> Result<E::Response, ApiEndpointCallError<E::Error>> {
-        let path_and_query = E::path_and_query(request)
-            .map_err(|error| ApiEndpointCallError::Transport(error.into()))?;
+        let path_and_query = E::path_and_query(request).map_err(ApiEndpointCallError::Query)?;
 
         let response = self
             .send_request::<E::Error>(&path_and_query, E::METHOD)
@@ -262,12 +258,12 @@ impl Client {
         let bytes = response
             .collect()
             .await
-            .map_err(|error| ApiEndpointCallError::Transport(error.into()))?
+            .map_err(TransportError::Body)?
             .to_bytes();
 
         E::parse_response(&bytes).map_err(|error| {
             event!(Level::ERROR, ?error, message = %String::from_utf8_lossy(&bytes), "Failed to deserialize response");
-            ApiEndpointCallError::Transport(error.into())
+            ApiEndpointCallError::Deserialize(error)
         })
     }
 
