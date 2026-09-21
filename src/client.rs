@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 use std::time::Duration;
 
-use color_eyre::{Section as _, eyre};
+use color_eyre::eyre;
 use http_body_util::{BodyExt as _, Full};
 use hyper::body::{Body, Bytes, Incoming};
 use hyper::{Method, Response};
@@ -16,8 +16,8 @@ use rustls::pki_types::{CertificateDer, DnsName, PrivateKeyDer, ServerName};
 use rustls::{DEFAULT_VERSIONS, RootCertStore};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
+use thiserror::Error;
 use tokio::time::timeout;
-use tokio_util::sync::CancellationToken;
 use tracing::{Level, event};
 
 use crate::config::Endpoint as ConfigEndpoint;
@@ -353,61 +353,88 @@ impl Client {
         .await
     }
 
-    /// Listen for events.
-    ///
-    /// An undecodable line is sent as an [`EventDecodeError`], and the stream continues.
+    /// Waits for the daemon's response head.
     ///
     /// # Errors
     ///
-    /// This function will return an error if:
-    ///
     /// * Failure to send the request
     /// * Response is not success
-    /// * Failure to read a frame
-    /// * The daemon ends the stream
-    /// * The receiver is closed
-    pub async fn produce_events(
+    pub async fn subscribe_events(
         &self,
-        sender: tokio::sync::mpsc::Sender<Result<Event, EventDecodeError>>,
-        cancellation_token: &CancellationToken,
-    ) -> Result<(), eyre::Report> {
-        let path_and_query = format!("/events{}", "");
+    ) -> Result<EventSubscription, ApiEndpointCallError<serde_json::Value>> {
+        let response = self.send_request("/events", Method::GET).await?;
 
-        let response = self
-            .send_request::<serde_json::Value>(&path_and_query, Method::GET)
-            .await?;
+        Ok(EventSubscription {
+            lines: EventLines::new(response.into_body()),
+        })
+    }
+}
 
-        Client::forward_events(response, &sender, cancellation_token).await
+#[derive(Debug, Error)]
+pub enum EventStreamError {
+    #[error("Failed to read frame")]
+    Frame(#[source] hyper::Error),
+    #[error("The daemon ended the event stream")]
+    Ended,
+}
+
+pub struct EventSubscription {
+    lines: EventLines<Incoming>,
+}
+
+impl EventSubscription {
+    /// This method is cancel safe.
+    ///
+    /// # Errors
+    ///
+    /// See [`EventStreamError`].
+    pub async fn next(&mut self) -> Result<Result<Event, EventDecodeError>, EventStreamError> {
+        match self.lines.next().await {
+            Ok(Some(event)) => Ok(event),
+            Ok(None) => Err(EventStreamError::Ended),
+            Err(error) => Err(EventStreamError::Frame(error)),
+        }
+    }
+}
+
+struct EventLines<B> {
+    body: B,
+    buffer: Vec<u8>,
+}
+
+impl<B> EventLines<B>
+where
+    B: Body<Data = Bytes> + Unpin,
+{
+    fn new(body: B) -> Self {
+        EventLines {
+            body,
+            buffer: Vec::new(),
+        }
     }
 
-    async fn forward_events<B>(
-        mut body: B,
-        sender: &tokio::sync::mpsc::Sender<Result<Event, EventDecodeError>>,
-        cancellation_token: &CancellationToken,
-    ) -> Result<(), eyre::Report>
-    where
-        B: Body<Data = Bytes> + Unpin,
-        B::Error: std::error::Error + Send + Sync + 'static,
-    {
-        let mut buffer = Vec::<u8>::new();
-
+    async fn next(&mut self) -> Result<Option<Result<Event, EventDecodeError>>, B::Error> {
         // Inspired by https://github.com/EmbarkStudios/wasmtime/blob/056ccdec94f89d00325970d1239429a1b39ec729/crates/wasi-http/src/http_impl.rs#L246-L268
         loop {
-            let frame = tokio::select! {
-                frame = body.frame() => frame,
-                () = cancellation_token.cancelled() => {
-                    return Ok(());
-                },
-            };
+            if let Some(i) = self.buffer.iter().position(|b| b == &b'\n') {
+                let decoded = decode_event(&self.buffer[0..i]);
 
-            let frame = match frame {
-                Some(Ok(frame)) => frame,
-                Some(Err(error)) => {
-                    return Err(eyre::Report::new(error).wrap_err("Failed to read frame"));
-                },
-                None => {
-                    return Err(eyre::Report::msg("No more next frame, other side gone"));
-                },
+                self.buffer.drain(0..=i);
+
+                return Ok(Some(decoded));
+            }
+
+            if !self.buffer.is_empty() {
+                // sometimes we get multiple frames per event
+                event!(
+                    Level::TRACE,
+                    leftover = ?String::from_utf8_lossy(&self.buffer),
+                    "Buffer leftover"
+                );
+            }
+
+            let Some(frame) = self.body.frame().await.transpose()? else {
+                return Ok(None);
             };
 
             let Ok(data) = frame.into_data() else {
@@ -415,45 +442,24 @@ impl Client {
                 continue;
             };
 
-            buffer.extend_from_slice(&data);
-
-            while let Some(i) = buffer.iter().position(|b| b == &b'\n') {
-                Client::decode_send(&buffer[0..i], sender).await?;
-
-                buffer.drain(0..=i);
-            }
-
-            if !buffer.is_empty() {
-                // sometimes we get multiple frames per event
-                event!(
-                    Level::TRACE,
-                    leftover = ?String::from_utf8_lossy(&buffer),
-                    "Buffer leftover"
-                );
-            }
+            self.buffer.extend_from_slice(&data);
         }
     }
+}
 
-    async fn decode_send(
-        line: &[u8],
-        sender: &tokio::sync::mpsc::Sender<Result<Event, EventDecodeError>>,
-    ) -> Result<(), eyre::Report> {
-        event!(Level::TRACE, data = %String::from_utf8_lossy(line), "New event");
+fn decode_event(line: &[u8]) -> Result<Event, EventDecodeError> {
+    event!(Level::TRACE, data = %String::from_utf8_lossy(line), "New event");
 
-        let decoded = serde_json::from_slice(line).map_err(|source| EventDecodeError {
-            source,
-            line: line.into(),
-        });
-
-        sender
-            .send(decoded)
-            .await
-            .map_err(|error| eyre::Report::msg("Channel closed").error(error))
-    }
+    serde_json::from_slice(line).map_err(|source| EventDecodeError {
+        source,
+        line: line.into(),
+    })
 }
 
 #[cfg(test)]
 mod tests {
+    use std::collections::VecDeque;
+    use std::convert::Infallible;
     use std::io::{Read as _, Write as _};
     use std::net::TcpListener;
     use std::pin::Pin;
@@ -464,14 +470,12 @@ mod tests {
     use http_body_util::Empty;
     use hyper::body::{Body, Bytes, Frame};
     use pretty_assertions::assert_eq;
-    use tokio_util::sync::CancellationToken;
 
-    use crate::client::Client;
+    use crate::client::{Client, EventLines, EventStreamError};
     use crate::config::Endpoint;
     use crate::endpoint::ApiEndpointCallError;
-    use crate::models::events::Event;
+    use crate::models::events::{Event, EventDecodeError};
 
-    /// Yields its error once, then ends.
     struct FailingBody(Option<std::io::Error>);
 
     impl Body for FailingBody {
@@ -486,78 +490,138 @@ mod tests {
         }
     }
 
-    #[tokio::test]
-    async fn failed_frame_read_is_returned() {
-        let (sender, _receiver) = tokio::sync::mpsc::channel(1);
-
-        let error = Client::forward_events(
-            FailingBody(Some(std::io::Error::other("connection reset"))),
-            &sender,
-            &CancellationToken::new(),
-        )
-        .await
-        .unwrap_err();
-
-        assert_eq!(error.to_string(), "Failed to read frame");
-        assert_eq!(error.root_cause().to_string(), "connection reset");
+    enum Step {
+        Data(Bytes),
+        Pending,
     }
 
-    #[tokio::test]
-    async fn ended_stream_is_an_error() {
-        let (sender, _receiver) = tokio::sync::mpsc::channel(1);
+    struct Frames(VecDeque<Step>);
 
-        let error =
-            Client::forward_events(Empty::<Bytes>::new(), &sender, &CancellationToken::new())
-                .await
-                .unwrap_err();
+    impl Body for Frames {
+        type Data = Bytes;
+        type Error = Infallible;
 
-        assert_eq!(error.to_string(), "No more next frame, other side gone");
+        fn poll_frame(
+            mut self: Pin<&mut Self>,
+            cx: &mut Context<'_>,
+        ) -> Poll<Option<Result<Frame<Bytes>, Infallible>>> {
+            match self.0.pop_front() {
+                Some(Step::Data(data)) => Poll::Ready(Some(Ok(Frame::data(data)))),
+                Some(Step::Pending) => {
+                    cx.waker().wake_by_ref();
+
+                    Poll::Pending
+                },
+                None => Poll::Ready(None),
+            }
+        }
     }
 
-    #[tokio::test]
-    async fn decodable_line_is_sent_as_event() {
-        let (sender, mut receiver) = tokio::sync::mpsc::channel(1);
+    fn data(text: &str) -> Step {
+        Step::Data(Bytes::copy_from_slice(text.as_bytes()))
+    }
 
-        Client::decode_send(
-            br#"{"Type":"container","Action":"start","Actor":{"ID":"0f9fc026ac74","Attributes":{}},"scope":"local","time":1,"timeNano":2}"#,
-            &sender,
-        )
-        .await
-        .unwrap();
+    fn frames<const N: usize>(steps: [Step; N]) -> EventLines<Frames> {
+        EventLines::new(Frames(VecDeque::from(steps)))
+    }
 
-        let Some(Ok(Event::Container(body))) = receiver.recv().await else {
+    fn line(action: &str) -> String {
+        let mut line = format!(
+            r#"{{"Type":"container","Action":"{}","Actor":{{"ID":"0f9fc026ac74","Attributes":{{}}}},"scope":"local","time":1,"timeNano":2}}"#,
+            action
+        );
+
+        line.push('\n');
+
+        line
+    }
+
+    fn container_action(next: Option<Result<Event, EventDecodeError>>) -> Box<str> {
+        let Some(Ok(Event::Container(body))) = next else {
             panic!("not a container event");
         };
 
-        assert_eq!(&*body.action, "start");
+        body.action
     }
 
     #[tokio::test]
-    async fn undecodable_line_is_sent_as_error() {
-        let (sender, mut receiver) = tokio::sync::mpsc::channel(1);
+    async fn failed_frame_read_is_returned() {
+        let mut lines =
+            EventLines::new(FailingBody(Some(std::io::Error::other("connection reset"))));
 
-        Client::decode_send(br#"{"Type":"container"}"#, &sender)
-            .await
-            .unwrap();
+        let Err(error) = lines.next().await else {
+            panic!("not a frame error");
+        };
 
-        let Some(Err(error)) = receiver.recv().await else {
+        assert_eq!(error.to_string(), "connection reset");
+    }
+
+    #[tokio::test]
+    async fn ended_body_is_none() {
+        let mut lines = EventLines::new(Empty::<Bytes>::new());
+
+        assert!(matches!(lines.next().await, Ok(None)));
+    }
+
+    #[tokio::test]
+    async fn decodable_line_is_returned_as_event() {
+        let start = line("start");
+        let mut lines = frames([data(&start)]);
+
+        assert_eq!(&*container_action(lines.next().await.unwrap()), "start");
+    }
+
+    #[tokio::test]
+    async fn undecodable_line_leaves_the_stream_open() {
+        let start = line("start");
+        let mut lines = frames([data("{\"Type\":\"container\"}\n"), data(&start)]);
+
+        let Ok(Some(Err(error))) = lines.next().await else {
             panic!("not a decode error");
         };
 
         assert_eq!(&*error.line, br#"{"Type":"container"}"#);
+
+        assert_eq!(&*container_action(lines.next().await.unwrap()), "start");
     }
 
     #[tokio::test]
-    async fn closed_receiver_is_an_error() {
-        let (sender, receiver) = tokio::sync::mpsc::channel(1);
-        drop(receiver);
+    async fn split_event_is_one_event() {
+        let start = line("start");
+        let (head, tail) = start.split_at(40);
+        let mut lines = frames([data(head), data(tail)]);
 
-        let error = Client::decode_send(b"{}", &sender).await.unwrap_err();
+        assert_eq!(&*container_action(lines.next().await.unwrap()), "start");
 
-        assert_eq!(error.to_string(), "Channel closed");
+        assert!(matches!(lines.next().await, Ok(None)));
     }
 
-    /// Answers one request with `head`, then writes each message of the returned channel to the connection.
+    #[tokio::test]
+    async fn shared_frame_returns_its_events_in_order() {
+        let both = format!("{}{}", line("start"), line("die"));
+        let mut lines = frames([data(&both)]);
+
+        assert_eq!(&*container_action(lines.next().await.unwrap()), "start");
+
+        assert_eq!(&*container_action(lines.next().await.unwrap()), "die");
+    }
+
+    #[tokio::test]
+    async fn dropped_call_keeps_the_partial_line() {
+        let start = line("start");
+        let (head, tail) = start.split_at(40);
+        let mut lines = frames([data(head), Step::Pending, data(tail)]);
+
+        tokio::select! {
+            biased;
+            _ = lines.next() => panic!("the line is incomplete"),
+            () = std::future::ready(()) => {},
+        }
+
+        assert_eq!(&*container_action(lines.next().await.unwrap()), "start");
+    }
+
+    /// A dropped sender closes the connection.
     fn serve(head: &'static str) -> (Client, std::sync::mpsc::Sender<String>) {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let address = listener.local_addr().unwrap();
@@ -588,20 +652,54 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn unsuccessful_response_is_an_error() {
+    async fn response_head_returns_the_subscription() {
+        let (client, body) = serve("HTTP/1.1 200 OK\r\ntransfer-encoding: chunked\r\n\r\n");
+
+        let mut subscription = client.subscribe_events().await.unwrap();
+
+        let start = line("start");
+
+        body.send(format!("{:x}\r\n{}\r\n0\r\n\r\n", start.len(), start))
+            .unwrap();
+        drop(body);
+
+        let Ok(Ok(Event::Container(event))) = subscription.next().await else {
+            panic!("not a container event");
+        };
+
+        assert_eq!(&*event.action, "start");
+
+        assert!(matches!(
+            subscription.next().await,
+            Err(EventStreamError::Ended)
+        ));
+    }
+
+    #[tokio::test]
+    async fn broken_chunk_is_a_frame_error() {
+        let (client, body) = serve("HTTP/1.1 200 OK\r\ntransfer-encoding: chunked\r\n\r\n");
+
+        let mut subscription = client.subscribe_events().await.unwrap();
+
+        // the chunk announces 5 bytes, and the connection closes after 2
+        body.send("5\r\nab".to_owned()).unwrap();
+        drop(body);
+
+        let Err(error) = subscription.next().await else {
+            panic!("not an error");
+        };
+
+        assert!(matches!(error, EventStreamError::Frame(_)));
+        assert_eq!(error.to_string(), "Failed to read frame");
+    }
+
+    #[tokio::test]
+    async fn unsuccessful_subscription_returns_the_daemon_error() {
         let (client, _body) = serve(
             "HTTP/1.1 500 Internal Server Error\r\ncontent-length: 18\r\n\r\n{\"message\":\"boom\"}",
         );
-        let (sender, _receiver) = tokio::sync::mpsc::channel(1);
 
-        let error = client
-            .produce_events(sender, &CancellationToken::new())
-            .await
-            .unwrap_err();
-
-        let Some(&ApiEndpointCallError::Typed(ref error)) =
-            error.downcast_ref::<ApiEndpointCallError<serde_json::Value>>()
-        else {
+        let Err(ApiEndpointCallError::Typed(error)) = client.subscribe_events().await else {
             panic!("not the daemon's error");
         };
 
