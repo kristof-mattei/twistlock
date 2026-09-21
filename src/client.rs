@@ -15,6 +15,7 @@ use rustls::pki_types::pem::PemObject as _;
 use rustls::pki_types::{CertificateDer, DnsName, PrivateKeyDer, ServerName};
 use rustls::{DEFAULT_VERSIONS, RootCertStore};
 use serde::Serialize;
+use serde::de::DeserializeOwned;
 use tokio::time::timeout;
 use tokio_util::sync::CancellationToken;
 use tracing::{Level, event};
@@ -172,14 +173,18 @@ impl Client {
         Ok(daemon)
     }
 
-    async fn send_request(
+    async fn send_request<TError>(
         &self,
         path_and_query: &str,
         method: Method,
-    ) -> Result<Response<Incoming>, eyre::Report> {
-        let request = build_request(self.uri.clone(), path_and_query, method)?;
+    ) -> Result<Response<Incoming>, ApiEndpointCallError<TError>>
+    where
+        TError: DeserializeOwned + std::fmt::Debug,
+    {
+        let request = build_request(self.uri.clone(), path_and_query, method)
+            .map_err(ApiEndpointCallError::Transport)?;
 
-        match self.endpoint {
+        let response: Result<Response<Incoming>, eyre::Report> = match self.endpoint {
             DockerEndpoint::Tls(ref client) => {
                 let response = execute_request(client, request);
 
@@ -199,7 +204,38 @@ impl Client {
                     Err(error) => Err(error.into()),
                 }
             },
+        };
+
+        let response = response.map_err(ApiEndpointCallError::Transport)?;
+
+        let status_code = response.status();
+
+        if status_code.is_success() {
+            return Ok(response);
         }
+
+        let bytes = response
+            .collect()
+            .await
+            .map_err(|error| ApiEndpointCallError::Transport(error.into()))?
+            .to_bytes();
+
+        if let Ok(typed_err) = serde_json::from_slice::<TError>(&bytes) {
+            return Err(ApiEndpointCallError::Typed(typed_err));
+        }
+
+        if let Ok(generic) = serde_json::from_slice::<serde_json::Value>(&bytes) {
+            return Err(ApiEndpointCallError::Generic(generic));
+        }
+
+        let body = String::from_utf8_lossy(&bytes).into_owned();
+
+        event!(Level::ERROR, %status_code, message = %body, "Invalid response");
+
+        Err(ApiEndpointCallError::HttpError {
+            status: status_code,
+            body,
+        })
     }
 
     /// Call a typed [`ApiEndpoint`], returning a structured error on failure.
@@ -220,11 +256,8 @@ impl Client {
             .map_err(|error| ApiEndpointCallError::Transport(error.into()))?;
 
         let response = self
-            .send_request(&path_and_query, E::METHOD)
-            .await
-            .map_err(ApiEndpointCallError::Transport)?;
-
-        let status_code = response.status();
+            .send_request::<E::Error>(&path_and_query, E::METHOD)
+            .await?;
 
         let bytes = response
             .collect()
@@ -232,29 +265,10 @@ impl Client {
             .map_err(|error| ApiEndpointCallError::Transport(error.into()))?
             .to_bytes();
 
-        if status_code.is_success() {
-            E::parse_response(&bytes).map_err(|error| {
-                event!(Level::ERROR, ?error, message = %String::from_utf8_lossy(&bytes), "Failed to deserialize response");
-                ApiEndpointCallError::Transport(error.into())
-            })
-        } else {
-            if let Ok(typed_err) = serde_json::from_slice::<E::Error>(&bytes) {
-                return Err(ApiEndpointCallError::Typed(typed_err));
-            }
-
-            if let Ok(generic) = serde_json::from_slice::<serde_json::Value>(&bytes) {
-                return Err(ApiEndpointCallError::Generic(generic));
-            }
-
-            let body = String::from_utf8_lossy(&bytes).into_owned();
-
-            event!(Level::ERROR, %status_code, message = %body, "Invalid response");
-
-            Err(ApiEndpointCallError::HttpError {
-                status: status_code,
-                body,
-            })
-        }
+        E::parse_response(&bytes).map_err(|error| {
+            event!(Level::ERROR, ?error, message = %String::from_utf8_lossy(&bytes), "Failed to deserialize response");
+            ApiEndpointCallError::Transport(error.into())
+        })
     }
 
     /// List all containers based on a filter.
@@ -348,6 +362,7 @@ impl Client {
     /// This function will return an error if:
     ///
     /// * Failure to send the request
+    /// * Response is not success
     /// * Failure to read a frame
     /// * The daemon ends the stream
     /// * The receiver is closed
@@ -358,7 +373,9 @@ impl Client {
     ) -> Result<(), eyre::Report> {
         let path_and_query = format!("/events{}", "");
 
-        let response = self.send_request(&path_and_query, Method::GET).await?;
+        let response = self
+            .send_request::<serde_json::Value>(&path_and_query, Method::GET)
+            .await?;
 
         Client::forward_events(response, &sender, cancellation_token).await
     }
@@ -437,8 +454,12 @@ impl Client {
 
 #[cfg(test)]
 mod tests {
+    use std::io::{Read as _, Write as _};
+    use std::net::TcpListener;
     use std::pin::Pin;
+    use std::str::FromStr as _;
     use std::task::{Context, Poll};
+    use std::time::Duration;
 
     use http_body_util::Empty;
     use hyper::body::{Body, Bytes, Frame};
@@ -446,6 +467,8 @@ mod tests {
     use tokio_util::sync::CancellationToken;
 
     use crate::client::Client;
+    use crate::config::Endpoint;
+    use crate::endpoint::ApiEndpointCallError;
     use crate::models::events::Event;
 
     /// Yields its error once, then ends.
@@ -532,5 +555,56 @@ mod tests {
         let error = Client::decode_send(b"{}", &sender).await.unwrap_err();
 
         assert_eq!(error.to_string(), "Channel closed");
+    }
+
+    /// Answers one request with `head`, then writes each message of the returned channel to the connection.
+    fn serve(head: &'static str) -> (Client, std::sync::mpsc::Sender<String>) {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let (body_sender, body_receiver) = std::sync::mpsc::channel::<String>();
+
+        std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+
+            let mut request = Vec::new();
+            let mut byte = [0_u8; 1];
+
+            while !request.ends_with(b"\r\n\r\n") {
+                stream.read_exact(&mut byte).unwrap();
+                request.push(byte[0]);
+            }
+
+            stream.write_all(head.as_bytes()).unwrap();
+
+            for part in body_receiver {
+                stream.write_all(part.as_bytes()).unwrap();
+            }
+        });
+
+        let endpoint = Endpoint::from_str(&format!("tcp://{}", address)).unwrap();
+        let client = Client::build(endpoint, None, None, Duration::from_secs(5)).unwrap();
+
+        (client, body_sender)
+    }
+
+    #[tokio::test]
+    async fn unsuccessful_response_is_an_error() {
+        let (client, _body) = serve(
+            "HTTP/1.1 500 Internal Server Error\r\ncontent-length: 18\r\n\r\n{\"message\":\"boom\"}",
+        );
+        let (sender, _receiver) = tokio::sync::mpsc::channel(1);
+
+        let error = client
+            .produce_events(sender, &CancellationToken::new())
+            .await
+            .unwrap_err();
+
+        let Some(&ApiEndpointCallError::Typed(ref error)) =
+            error.downcast_ref::<ApiEndpointCallError<serde_json::Value>>()
+        else {
+            panic!("not the daemon's error");
+        };
+
+        assert_eq!(error["message"], "boom");
     }
 }
