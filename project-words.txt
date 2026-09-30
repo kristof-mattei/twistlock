@@ -23,6 +23,7 @@ idents
 kristof
 lintian
 mattei
+mkhl
 monomorphization
 msvc
 multiplatform
