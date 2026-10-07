@@ -1,4 +1,10 @@
 <!-- header goes here -->
+## [0.8.1](https://github.com/kristof-mattei/twistlock/compare/v0.8.0..v0.8.1) - 2026-10-07
+
+### 🐛 Bug Fixes
+
+- *(deps)* Update rust crate hyper-unix-socket to 0.7.0 by [@renovate[bot]](https://github.com/renovate[bot]) ([`e2d4fba`](https://github.com/kristof-mattei/twistlock/commit/e2d4fba44758b207ad45cc92a85ea9000c14871a))
+- *(deps)* Raise `tokio` to 1.53.0 for `hyper-unix-socket` 0.7.0 by [@kristof-mattei](https://github.com/kristof-mattei) ([`21a103a`](https://github.com/kristof-mattei/twistlock/commit/21a103a46a45fcfc564fc0aa80befee52c5b3499))
 ## [0.8.0](https://github.com/kristof-mattei/twistlock/compare/v0.7.0..v0.8.0) - 2026-09-21
 
 ### 🚀 Features
