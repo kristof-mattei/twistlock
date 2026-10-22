@@ -19,7 +19,7 @@ pub enum ApiEndpointCallError {
     #[error("Daemon error: {}, message: {}", .status, .message)]
     Daemon { status: StatusCode, message: String },
     /// Unaccepted status, body is not an `ErrorResponse`.
-    #[error("HTTP error: {status}, body: {body}")]
+    #[error("HTTP error: {}, body: {}", .status, .body)]
     HttpError { status: StatusCode, body: String },
     #[error("Failed to serialize the request parameters")]
     Query(#[source] std::io::Error),
