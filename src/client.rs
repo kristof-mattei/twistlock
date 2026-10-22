@@ -237,7 +237,7 @@ impl Client {
     /// * Failure to send the request
     /// * Response is not success
     /// * Failed to deserialize the response
-    pub async fn call<E: ApiEndpoint>(
+    pub(crate) async fn call<E: ApiEndpoint>(
         &self,
         request: &E::Request<'_>,
     ) -> Result<E::Response, ApiEndpointCallError<E::Error>> {
@@ -266,8 +266,7 @@ impl Client {
     pub async fn list_containers(
         &self,
         filters: &Filters,
-    ) -> Result<Vec<ContainerSummary>, ApiEndpointCallError<<ListContainers as ApiEndpoint>::Error>>
-    {
+    ) -> Result<Vec<ContainerSummary>, ApiEndpointCallError<serde_json::Value>> {
         self.call::<ListContainers>(filters).await
     }
 
@@ -282,8 +281,7 @@ impl Client {
     pub async fn inspect_container<'r, C: Into<ContainerRef<'r>>>(
         &self,
         container: C,
-    ) -> Result<ContainerInspect, ApiEndpointCallError<<InspectContainer as ApiEndpoint>::Error>>
-    {
+    ) -> Result<ContainerInspect, ApiEndpointCallError<serde_json::Value>> {
         self.call::<InspectContainer>(&container.into()).await
     }
 
@@ -297,8 +295,7 @@ impl Client {
     /// * Response is not success
     pub async fn list_networks(
         &self,
-    ) -> Result<Vec<NetworkSummary>, ApiEndpointCallError<<ListNetworks as ApiEndpoint>::Error>>
-    {
+    ) -> Result<Vec<NetworkSummary>, ApiEndpointCallError<serde_json::Value>> {
         self.call::<ListNetworks>(&()).await
     }
 
@@ -313,7 +310,7 @@ impl Client {
     pub async fn inspect_network<'r, N: Into<NetworkRef<'r>>>(
         &self,
         network: N,
-    ) -> Result<NetworkInspect, ApiEndpointCallError<<InspectNetwork as ApiEndpoint>::Error>> {
+    ) -> Result<NetworkInspect, ApiEndpointCallError<serde_json::Value>> {
         self.call::<InspectNetwork>(&network.into()).await
     }
 
@@ -329,7 +326,7 @@ impl Client {
         &self,
         container: C,
         timeout: StopTimeout,
-    ) -> Result<(), ApiEndpointCallError<<RestartContainer as ApiEndpoint>::Error>> {
+    ) -> Result<(), ApiEndpointCallError<serde_json::Value>> {
         self.call::<RestartContainer>(&RestartContainerRequest {
             container: container.into(),
             timeout,

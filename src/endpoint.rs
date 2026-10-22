@@ -37,7 +37,7 @@ where
 }
 
 /// A typed Docker API endpoint.
-pub trait ApiEndpoint {
+pub(crate) trait ApiEndpoint {
     /// Request.
     type Request<'r>: ?Sized;
     /// Successful response.

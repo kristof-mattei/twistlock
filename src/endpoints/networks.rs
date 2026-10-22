@@ -4,7 +4,7 @@ use crate::endpoint::ApiEndpoint;
 use crate::models::id::NetworkRef;
 use crate::models::network::{NetworkInspect, NetworkSummary};
 
-pub struct ListNetworks;
+pub(crate) struct ListNetworks;
 
 impl ApiEndpoint for ListNetworks {
     type Request<'r> = ();
@@ -18,7 +18,7 @@ impl ApiEndpoint for ListNetworks {
     }
 }
 
-pub struct InspectNetwork;
+pub(crate) struct InspectNetwork;
 
 impl ApiEndpoint for InspectNetwork {
     type Request<'r> = NetworkRef<'r>;
