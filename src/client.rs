@@ -12,8 +12,7 @@ use rustls::client::ClientConfig;
 use rustls::pki_types::pem::{Error as PemError, PemObject as _};
 use rustls::pki_types::{CertificateDer, DnsName, PrivateKeyDer, ServerName};
 use rustls::{DEFAULT_VERSIONS, RootCertStore};
-use serde::Serialize;
-use serde::de::DeserializeOwned;
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tracing::{Level, event};
 
@@ -110,6 +109,11 @@ async fn read_body(response: Response<Incoming>) -> Result<Bytes, TransportError
         .map_err(TransportError::Body)
 }
 
+#[derive(Deserialize)]
+struct ErrorResponse {
+    message: String,
+}
+
 #[derive(Debug)]
 pub struct Client {
     endpoint: DockerEndpoint,
@@ -183,15 +187,12 @@ impl Client {
         Ok(daemon)
     }
 
-    async fn send_request<TError>(
+    async fn send_request(
         &self,
         path_and_query: &str,
         method: Method,
         accepts: fn(StatusCode) -> bool,
-    ) -> Result<Response<Incoming>, ApiEndpointCallError<TError>>
-    where
-        TError: DeserializeOwned + std::fmt::Debug,
-    {
+    ) -> Result<Response<Incoming>, ApiEndpointCallError> {
         let request = build_request(self.uri.clone(), path_and_query, method)
             .map_err(TransportError::Build)?;
 
@@ -211,12 +212,11 @@ impl Client {
 
         let bytes = read_body(response).await?;
 
-        if let Ok(typed_err) = serde_json::from_slice::<TError>(&bytes) {
-            return Err(ApiEndpointCallError::Typed(typed_err));
-        }
-
-        if let Ok(generic) = serde_json::from_slice::<serde_json::Value>(&bytes) {
-            return Err(ApiEndpointCallError::Generic(generic));
+        if let Ok(error_response) = serde_json::from_slice::<ErrorResponse>(&bytes) {
+            return Err(ApiEndpointCallError::Daemon {
+                status: status_code,
+                message: error_response.message,
+            });
         }
 
         let body = String::from_utf8_lossy(&bytes).into_owned();
@@ -242,11 +242,11 @@ impl Client {
     pub(crate) async fn call<E: ApiEndpoint>(
         &self,
         request: &E::Request<'_>,
-    ) -> Result<E::Response, ApiEndpointCallError<E::Error>> {
+    ) -> Result<E::Response, ApiEndpointCallError> {
         let path_and_query = E::path_and_query(request).map_err(ApiEndpointCallError::Query)?;
 
         let response = self
-            .send_request::<E::Error>(&path_and_query, E::METHOD, E::accepts)
+            .send_request(&path_and_query, E::METHOD, E::accepts)
             .await?;
 
         let status = response.status();
@@ -270,7 +270,7 @@ impl Client {
     pub async fn list_containers(
         &self,
         filters: &Filters,
-    ) -> Result<Vec<ContainerSummary>, ApiEndpointCallError<serde_json::Value>> {
+    ) -> Result<Vec<ContainerSummary>, ApiEndpointCallError> {
         self.call::<ListContainers>(filters).await
     }
 
@@ -285,7 +285,7 @@ impl Client {
     pub async fn inspect_container<'r, C: Into<ContainerRef<'r>>>(
         &self,
         container: C,
-    ) -> Result<ContainerInspect, ApiEndpointCallError<serde_json::Value>> {
+    ) -> Result<ContainerInspect, ApiEndpointCallError> {
         self.call::<InspectContainer>(&container.into()).await
     }
 
@@ -297,9 +297,7 @@ impl Client {
     ///
     /// * Failure to send the request
     /// * Response is not success
-    pub async fn list_networks(
-        &self,
-    ) -> Result<Vec<NetworkSummary>, ApiEndpointCallError<serde_json::Value>> {
+    pub async fn list_networks(&self) -> Result<Vec<NetworkSummary>, ApiEndpointCallError> {
         self.call::<ListNetworks>(&()).await
     }
 
@@ -314,7 +312,7 @@ impl Client {
     pub async fn inspect_network<'r, N: Into<NetworkRef<'r>>>(
         &self,
         network: N,
-    ) -> Result<NetworkInspect, ApiEndpointCallError<serde_json::Value>> {
+    ) -> Result<NetworkInspect, ApiEndpointCallError> {
         self.call::<InspectNetwork>(&network.into()).await
     }
 
@@ -332,7 +330,7 @@ impl Client {
         &self,
         container: C,
         timeout: StopTimeout,
-    ) -> Result<(), ApiEndpointCallError<serde_json::Value>> {
+    ) -> Result<(), ApiEndpointCallError> {
         self.call::<RestartContainer>(&RestartContainerRequest {
             container: container.into(),
             timeout,
@@ -354,7 +352,7 @@ impl Client {
         &self,
         container: C,
         timeout: StopTimeout,
-    ) -> Result<StopOutcome, ApiEndpointCallError<serde_json::Value>> {
+    ) -> Result<StopOutcome, ApiEndpointCallError> {
         self.call::<StopContainer>(&StopContainerRequest {
             container: container.into(),
             timeout,
@@ -368,9 +366,7 @@ impl Client {
     ///
     /// * Failure to send the request
     /// * Response is not success
-    pub async fn subscribe_events(
-        &self,
-    ) -> Result<EventSubscription, ApiEndpointCallError<serde_json::Value>> {
+    pub async fn subscribe_events(&self) -> Result<EventSubscription, ApiEndpointCallError> {
         let response = self
             .send_request("/events", Method::GET, |status| status.is_success())
             .await?;
@@ -749,10 +745,27 @@ mod tests {
             "HTTP/1.1 500 Internal Server Error\r\ncontent-length: 18\r\n\r\n{\"message\":\"boom\"}",
         );
 
-        let Err(ApiEndpointCallError::Typed(error)) = client.subscribe_events().await else {
+        let Err(ApiEndpointCallError::Daemon { status, message }) = client.subscribe_events().await
+        else {
             panic!("not the daemon's error");
         };
 
-        assert_eq!(error["message"], "boom");
+        assert_eq!(status, 500);
+        assert_eq!(message, "boom");
+    }
+
+    #[tokio::test]
+    async fn unsuccessful_subscription_without_an_error_response_returns_the_body() {
+        let (client, _body) = serve(
+            "HTTP/1.1 500 Internal Server Error\r\ncontent-length: 16\r\n\r\n{\"error\":\"boom\"}",
+        );
+
+        let Err(ApiEndpointCallError::HttpError { status, body }) = client.subscribe_events().await
+        else {
+            panic!("not an HTTP error");
+        };
+
+        assert_eq!(status, 500);
+        assert_eq!(body, r#"{"error":"boom"}"#);
     }
 }
