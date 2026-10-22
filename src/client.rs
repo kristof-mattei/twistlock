@@ -20,7 +20,8 @@ use tracing::{Level, event};
 use crate::config::Endpoint as ConfigEndpoint;
 use crate::endpoint::{ApiEndpoint, ApiEndpointCallError, TransportError};
 use crate::endpoints::containers::{
-    InspectContainer, ListContainers, RestartContainer, RestartContainerRequest, StopTimeout,
+    InspectContainer, ListContainers, RestartContainer, RestartContainerRequest, StopContainer,
+    StopContainerRequest, StopOutcome, StopTimeout,
 };
 use crate::endpoints::networks::{InspectNetwork, ListNetworks};
 use crate::filters::Filters;
@@ -319,6 +320,8 @@ impl Client {
 
     /// Restart a container.
     ///
+    /// See [`Client::stop_container`] for when the future resolves.
+    ///
     /// # Errors
     ///
     /// This function will return an error if:
@@ -331,6 +334,28 @@ impl Client {
         timeout: StopTimeout,
     ) -> Result<(), ApiEndpointCallError<serde_json::Value>> {
         self.call::<RestartContainer>(&RestartContainerRequest {
+            container: container.into(),
+            timeout,
+        })
+        .await
+    }
+
+    /// Stop a container.
+    ///
+    /// The daemon answers once the container has stopped, so under [`StopTimeout::Indefinite`] the future resolves only after the container exits. Dropping the future ends only the client's wait; the stop continues in the daemon.
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    ///
+    /// * Failure to send the request
+    /// * The daemon answers with a status other than `2xx` or `304`
+    pub async fn stop_container<'r, C: Into<ContainerRef<'r>>>(
+        &self,
+        container: C,
+        timeout: StopTimeout,
+    ) -> Result<StopOutcome, ApiEndpointCallError<serde_json::Value>> {
+        self.call::<StopContainer>(&StopContainerRequest {
             container: container.into(),
             timeout,
         })
@@ -459,7 +484,7 @@ mod tests {
     use crate::client::{Client, EventLines, EventStreamError};
     use crate::config::Endpoint;
     use crate::endpoint::ApiEndpointCallError;
-    use crate::endpoints::containers::StopTimeout;
+    use crate::endpoints::containers::{StopOutcome, StopTimeout};
     use crate::models::events::{Event, EventDecodeError};
     use crate::models::id::ContainerRef;
 
@@ -678,6 +703,30 @@ mod tests {
 
         assert!(matches!(error, EventStreamError::Frame(_)));
         assert_eq!(error.to_string(), "Failed to read frame");
+    }
+
+    #[tokio::test]
+    async fn stop_with_no_content_is_stopped() {
+        let (client, _body) = serve("HTTP/1.1 204 No Content\r\n\r\n");
+
+        let outcome = client
+            .stop_container(ContainerRef::IdOrName("ubuntu"), StopTimeout::Default)
+            .await
+            .unwrap();
+
+        assert!(matches!(outcome, StopOutcome::Stopped));
+    }
+
+    #[tokio::test]
+    async fn stop_with_not_modified_is_already_stopped() {
+        let (client, _body) = serve("HTTP/1.1 304 Not Modified\r\n\r\n");
+
+        let outcome = client
+            .stop_container(ContainerRef::IdOrName("ubuntu"), StopTimeout::Default)
+            .await
+            .unwrap();
+
+        assert!(matches!(outcome, StopOutcome::AlreadyStopped));
     }
 
     #[tokio::test]
