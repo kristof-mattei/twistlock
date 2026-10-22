@@ -20,13 +20,13 @@ use crate::config::Endpoint as ConfigEndpoint;
 use crate::endpoint::{ApiEndpoint, ApiEndpointCallError, TransportError};
 use crate::endpoints::containers::{
     InspectContainer, ListContainers, RestartContainer, RestartContainerRequest, StopContainer,
-    StopContainerRequest, StopOutcome, StopTimeout,
+    StopContainerRequest,
 };
 use crate::endpoints::networks::{InspectNetwork, ListNetworks};
 use crate::filters::Filters;
 use crate::http_client;
 use crate::http_client::{build_request, execute_request};
-use crate::models::container::ContainerSummary;
+use crate::models::container::{ContainerSummary, StopOutcome, StopTimeout};
 use crate::models::container_inspect::ContainerInspect;
 use crate::models::events::{Event, EventDecodeError};
 use crate::models::id::{ContainerRef, NetworkRef};
@@ -480,7 +480,7 @@ mod tests {
     use crate::client::{Client, EventLines, EventStreamError};
     use crate::config::Endpoint;
     use crate::endpoint::ApiEndpointCallError;
-    use crate::endpoints::containers::{StopOutcome, StopTimeout};
+    use crate::models::container::{StopOutcome, StopTimeout};
     use crate::models::events::{Event, EventDecodeError};
     use crate::models::id::ContainerRef;
 

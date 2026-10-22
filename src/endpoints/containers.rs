@@ -1,11 +1,9 @@
-use std::time::Duration;
-
 use hyper::{Method, StatusCode};
 
 use crate::client::url_encode;
 use crate::endpoint::ApiEndpoint;
 use crate::filters::Filters;
-use crate::models::container::ContainerSummary;
+use crate::models::container::{ContainerSummary, StopOutcome, StopTimeout};
 use crate::models::container_inspect::ContainerInspect;
 use crate::models::id::ContainerRef;
 
@@ -55,17 +53,6 @@ impl ApiEndpoint for InspectContainer {
     ) -> Result<Self::Response, serde_json::Error> {
         serde_json::from_slice(bytes)
     }
-}
-
-/// The `t` parameter of the stop and restart endpoints: how long the daemon waits for the container to exit after the stop signal.
-#[derive(Clone, Copy)]
-pub enum StopTimeout {
-    /// Omits `t`, so the daemon applies the container's `StopTimeout`. Without one, Docker Engine 29.7 and later apply `default-stop-timeout`, and earlier versions apply a built-in timeout.
-    Default,
-    /// Sends `t=-1`, so the daemon waits for the container to exit and never kills it.
-    Indefinite,
-    /// Sends `t` in whole seconds, rounded up.
-    After(Duration),
 }
 
 fn stop_timeout_path(container: &ContainerRef<'_>, action: &str, timeout: StopTimeout) -> String {
@@ -118,12 +105,6 @@ pub(crate) struct StopContainerRequest<'r> {
     pub timeout: StopTimeout,
 }
 
-pub enum StopOutcome {
-    Stopped,
-    /// The container was not running.
-    AlreadyStopped,
-}
-
 pub(crate) struct StopContainer;
 
 impl ApiEndpoint for StopContainer {
@@ -168,9 +149,10 @@ mod tests {
     use crate::endpoint::ApiEndpoint as _;
     use crate::endpoints::containers::{
         InspectContainer, ListContainers, RestartContainer, RestartContainerRequest, StopContainer,
-        StopContainerRequest, StopOutcome, StopTimeout,
+        StopContainerRequest,
     };
     use crate::filters::{Filters, Health, Isolation, Status};
+    use crate::models::container::{StopOutcome, StopTimeout};
     use crate::models::id::{ContainerId, ContainerRef};
 
     #[test]
