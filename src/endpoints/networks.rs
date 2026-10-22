@@ -9,7 +9,6 @@ pub(crate) struct ListNetworks;
 impl ApiEndpoint for ListNetworks {
     type Request<'r> = ();
     type Response = Vec<NetworkSummary>;
-    type Error = serde_json::Value;
 
     const METHOD: Method = Method::GET;
 
@@ -30,7 +29,6 @@ pub(crate) struct InspectNetwork;
 impl ApiEndpoint for InspectNetwork {
     type Request<'r> = NetworkRef<'r>;
     type Response = NetworkInspect;
-    type Error = serde_json::Value;
 
     const METHOD: Method = Method::GET;
 
