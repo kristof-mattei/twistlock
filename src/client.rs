@@ -342,7 +342,7 @@ impl Client {
 
     /// Stop a container.
     ///
-    /// The daemon answers once the container has stopped, so under [`StopTimeout::Indefinite`] the future resolves only after the container exits. Dropping the future ends only the client's wait; the stop continues in the daemon.
+    /// The daemon answers once the container has stopped, so under [`StopTimeout::Indefinite`] the future resolves only after the container exits. Since Docker Engine 25.0, dropping the future ends only the client's wait; the stop continues in the daemon.
     ///
     /// # Errors
     ///
