@@ -12,7 +12,6 @@ pub(crate) struct ListContainers;
 impl ApiEndpoint for ListContainers {
     type Request<'r> = Filters;
     type Response = Vec<ContainerSummary>;
-    type Error = serde_json::Value;
 
     const METHOD: Method = Method::GET;
 
@@ -41,7 +40,6 @@ pub(crate) struct InspectContainer;
 impl ApiEndpoint for InspectContainer {
     type Request<'r> = ContainerRef<'r>;
     type Response = ContainerInspect;
-    type Error = serde_json::Value;
 
     const METHOD: Method = Method::GET;
 
@@ -83,7 +81,6 @@ pub(crate) struct RestartContainer;
 impl ApiEndpoint for RestartContainer {
     type Request<'r> = RestartContainerRequest<'r>;
     type Response = ();
-    type Error = serde_json::Value;
 
     const METHOD: Method = Method::POST;
 
@@ -113,7 +110,6 @@ pub(crate) struct StopContainer;
 impl ApiEndpoint for StopContainer {
     type Request<'r> = StopContainerRequest<'r>;
     type Response = StopOutcome;
-    type Error = serde_json::Value;
 
     const METHOD: Method = Method::POST;
 

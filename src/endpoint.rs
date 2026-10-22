@@ -1,6 +1,5 @@
 use http::StatusCode;
 use hyper::Method;
-use serde::de::DeserializeOwned;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -15,18 +14,12 @@ pub enum TransportError {
 
 /// Error type for endpoint calls.
 #[derive(Debug, Error)]
-pub enum ApiEndpointCallError<TError>
-where
-    TError: std::fmt::Debug,
-{
-    /// Unaccepted status and body parsed as the endpoint's typed error.
-    #[error("Error: {:?}", .0)]
-    Typed(TError),
-    /// Unaccepted status, body is valid JSON but didn't match `TError`.
-    #[error("Error: {}", .0)]
-    Generic(serde_json::Value),
-    /// Unaccepted status, body was not valid JSON.
-    #[error("HTTP error: {status}, body: {body}")]
+pub enum ApiEndpointCallError {
+    /// Unaccepted status, body is the daemon's `ErrorResponse`.
+    #[error("Daemon error: {}, message: {}", .status, .message)]
+    Daemon { status: StatusCode, message: String },
+    /// Unaccepted status, body is not an `ErrorResponse`.
+    #[error("HTTP error: {}, body: {}", .status, .body)]
     HttpError { status: StatusCode, body: String },
     #[error("Failed to serialize the request parameters")]
     Query(#[source] std::io::Error),
@@ -42,8 +35,6 @@ pub(crate) trait ApiEndpoint {
     type Request<'r>: ?Sized;
     /// Accepted response.
     type Response;
-    /// Error response.
-    type Error: DeserializeOwned + std::fmt::Debug;
 
     /// HTTP method for this endpoint.
     const METHOD: Method;
