@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use hyper::Method;
+use hyper::{Method, StatusCode};
 
 use crate::client::url_encode;
 use crate::endpoint::ApiEndpoint;
@@ -29,6 +29,13 @@ impl ApiEndpoint for ListContainers {
             url_encode(request)?
         ))
     }
+
+    fn parse_response(
+        _status: StatusCode,
+        bytes: &[u8],
+    ) -> Result<Self::Response, serde_json::Error> {
+        serde_json::from_slice(bytes)
+    }
 }
 
 pub(crate) struct InspectContainer;
@@ -42,6 +49,13 @@ impl ApiEndpoint for InspectContainer {
 
     fn path_and_query(request: &Self::Request<'_>) -> Result<String, std::io::Error> {
         Ok(format!("/containers/{}/json", request.as_str()))
+    }
+
+    fn parse_response(
+        _status: StatusCode,
+        bytes: &[u8],
+    ) -> Result<Self::Response, serde_json::Error> {
+        serde_json::from_slice(bytes)
     }
 }
 
@@ -94,7 +108,10 @@ impl ApiEndpoint for RestartContainer {
         ))
     }
 
-    fn parse_response(_bytes: &[u8]) -> Result<Self::Response, serde_json::Error> {
+    fn parse_response(
+        _status: StatusCode,
+        _bytes: &[u8],
+    ) -> Result<Self::Response, serde_json::Error> {
         Ok(())
     }
 }
