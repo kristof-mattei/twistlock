@@ -20,7 +20,7 @@ use tracing::{Level, event};
 use crate::config::Endpoint as ConfigEndpoint;
 use crate::endpoint::{ApiEndpoint, ApiEndpointCallError, TransportError};
 use crate::endpoints::containers::{
-    InspectContainer, ListContainers, RestartContainer, RestartContainerRequest,
+    InspectContainer, ListContainers, RestartContainer, RestartContainerRequest, StopTimeout,
 };
 use crate::endpoints::networks::{InspectNetwork, ListNetworks};
 use crate::filters::Filters;
@@ -328,7 +328,7 @@ impl Client {
     pub async fn restart_container<'r, C: Into<ContainerRef<'r>>>(
         &self,
         container: C,
-        timeout: std::time::Duration,
+        timeout: StopTimeout,
     ) -> Result<(), ApiEndpointCallError<<RestartContainer as ApiEndpoint>::Error>> {
         self.call::<RestartContainer>(&RestartContainerRequest {
             container: container.into(),
