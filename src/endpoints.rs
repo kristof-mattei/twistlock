@@ -1,2 +1,2 @@
 pub mod containers;
-pub mod networks;
+pub(crate) mod networks;
