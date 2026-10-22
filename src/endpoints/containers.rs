@@ -62,7 +62,7 @@ impl ApiEndpoint for InspectContainer {
 /// The `t` parameter of the stop and restart endpoints: how long the daemon waits for the container to exit after the stop signal.
 #[derive(Clone, Copy, Debug)]
 pub enum StopTimeout {
-    /// Omits `t`, so the daemon applies the container's `StopTimeout`, or when absent, the daemon's `default-stop-timeout`.
+    /// Omits `t`, so the daemon applies the container's `StopTimeout`. Without one, Docker Engine 29.7 and later apply `default-stop-timeout`, and earlier versions apply a built-in timeout.
     Default,
     /// Sends `t=-1`, so the daemon waits for the container to exit and never kills it.
     Indefinite,
