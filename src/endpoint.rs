@@ -19,13 +19,13 @@ pub enum ApiEndpointCallError<TError>
 where
     TError: std::fmt::Debug,
 {
-    /// Non-success status and body parsed as the endpoint's typed error.
+    /// Unaccepted status and body parsed as the endpoint's typed error.
     #[error("Error: {:?}", .0)]
     Typed(TError),
-    /// Non-success status, body is valid JSON but didn't match `TError`.
+    /// Unaccepted status, body is valid JSON but didn't match `TError`.
     #[error("Error: {}", .0)]
     Generic(serde_json::Value),
-    /// Non-success status, body was not valid JSON.
+    /// Unaccepted status, body was not valid JSON.
     #[error("HTTP error: {status}, body: {body}")]
     HttpError { status: StatusCode, body: String },
     #[error("Failed to serialize the request parameters")]
@@ -40,8 +40,8 @@ where
 pub(crate) trait ApiEndpoint {
     /// Request.
     type Request<'r>: ?Sized;
-    /// Successful response.
-    type Response: DeserializeOwned;
+    /// Accepted response.
+    type Response;
     /// Error response.
     type Error: DeserializeOwned + std::fmt::Debug;
 
@@ -55,12 +55,19 @@ pub(crate) trait ApiEndpoint {
     /// Returns an error if request parameters cannot be serialized.
     fn path_and_query(request: &Self::Request<'_>) -> Result<String, std::io::Error>;
 
-    /// Parse the response body into the response type.
+    /// Whether a response with `status` goes to [`ApiEndpoint::parse_response`] instead of becoming an error.
+    #[must_use]
+    fn accepts(status: StatusCode) -> bool {
+        status.is_success()
+    }
+
+    /// Parse an accepted response into the response type.
     ///
     /// # Errors
     ///
     /// Returns an error if the response body cannot be parsed.
-    fn parse_response(bytes: &[u8]) -> Result<Self::Response, serde_json::Error> {
-        serde_json::from_slice(bytes)
-    }
+    fn parse_response(
+        status: StatusCode,
+        bytes: &[u8],
+    ) -> Result<Self::Response, serde_json::Error>;
 }
