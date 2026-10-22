@@ -3,7 +3,7 @@ use hyper::{Method, StatusCode};
 use crate::client::url_encode;
 use crate::endpoint::ApiEndpoint;
 use crate::filters::Filters;
-use crate::models::container::{ContainerSummary, StopTimeout};
+use crate::models::container::{ContainerSummary, StopOutcome, StopTimeout};
 use crate::models::container_inspect::ContainerInspect;
 use crate::models::id::ContainerRef;
 
@@ -103,20 +103,60 @@ impl ApiEndpoint for RestartContainer {
     }
 }
 
+pub(crate) struct StopContainerRequest<'r> {
+    pub container: ContainerRef<'r>,
+    pub timeout: StopTimeout,
+}
+
+pub(crate) struct StopContainer;
+
+impl ApiEndpoint for StopContainer {
+    type Request<'r> = StopContainerRequest<'r>;
+    type Response = StopOutcome;
+    type Error = serde_json::Value;
+
+    const METHOD: Method = Method::POST;
+
+    fn path_and_query(request: &Self::Request<'_>) -> Result<String, std::io::Error> {
+        Ok(stop_timeout_path(
+            &request.container,
+            "stop",
+            request.timeout,
+        ))
+    }
+
+    fn accepts(status: StatusCode) -> bool {
+        status.is_success() || status == StatusCode::NOT_MODIFIED
+    }
+
+    fn parse_response(
+        status: StatusCode,
+        _bytes: &[u8],
+    ) -> Result<Self::Response, serde_json::Error> {
+        if status == StatusCode::NOT_MODIFIED {
+            Ok(StopOutcome::AlreadyStopped)
+        } else {
+            Ok(StopOutcome::Stopped)
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::time::Duration;
 
     use hashbrown::{HashMap, HashSet};
+    use hyper::StatusCode;
     use pretty_assertions::assert_eq;
 
     use crate::client::url_encode;
     use crate::endpoint::ApiEndpoint as _;
     use crate::endpoints::containers::{
-        InspectContainer, ListContainers, RestartContainer, RestartContainerRequest,
+        InspectContainer, ListContainers, RestartContainer, RestartContainerRequest, StopContainer,
+        StopContainerRequest,
     };
     use crate::filters::{Filters, Health, Isolation, Status};
-    use crate::models::container::StopTimeout;
+    use crate::models::container::{StopOutcome, StopTimeout};
     use crate::models::id::{ContainerId, ContainerRef};
 
     #[test]
@@ -166,6 +206,14 @@ mod tests {
         .unwrap()
     }
 
+    fn stop_path(timeout: StopTimeout) -> String {
+        StopContainer::path_and_query(&StopContainerRequest {
+            container: ContainerRef::IdOrName("ubuntu"),
+            timeout,
+        })
+        .unwrap()
+    }
+
     #[test]
     fn restart_container_path_includes_the_timeout() {
         assert_eq!(
@@ -204,6 +252,53 @@ mod tests {
             restart_path(StopTimeout::Indefinite),
             "/containers/ubuntu/restart?t=-1"
         );
+    }
+
+    #[test]
+    fn stop_container_path_rounds_a_partial_second_up() {
+        assert_eq!(
+            stop_path(StopTimeout::After(Duration::from_millis(500))),
+            "/containers/ubuntu/stop?t=1"
+        );
+    }
+
+    #[test]
+    fn stop_container_path_with_default_timeout_omits_t() {
+        assert_eq!(stop_path(StopTimeout::Default), "/containers/ubuntu/stop");
+    }
+
+    #[test]
+    fn stop_container_path_with_indefinite_timeout() {
+        assert_eq!(
+            stop_path(StopTimeout::Indefinite),
+            "/containers/ubuntu/stop?t=-1"
+        );
+    }
+
+    #[test]
+    fn stop_container_no_content_is_stopped() {
+        assert!(
+            StopContainer::accepts(StatusCode::NO_CONTENT),
+            "`StopContainer` accepts `204`"
+        );
+
+        assert!(matches!(
+            StopContainer::parse_response(StatusCode::NO_CONTENT, b"").unwrap(),
+            StopOutcome::Stopped
+        ));
+    }
+
+    #[test]
+    fn stop_container_not_modified_is_already_stopped() {
+        assert!(
+            StopContainer::accepts(StatusCode::NOT_MODIFIED),
+            "`StopContainer` accepts `304`"
+        );
+
+        assert!(matches!(
+            StopContainer::parse_response(StatusCode::NOT_MODIFIED, b"").unwrap(),
+            StopOutcome::AlreadyStopped
+        ));
     }
 
     fn build(mode: &str) -> Filters {

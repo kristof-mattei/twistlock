@@ -117,6 +117,14 @@ pub enum StopTimeout {
     After(Duration),
 }
 
+/// The result of a successful stop request.
+pub enum StopOutcome {
+    /// The daemon stopped the container.
+    Stopped,
+    /// The container was not running.
+    AlreadyStopped,
+}
+
 #[cfg(test)]
 mod tests {
     use std::net::Ipv4Addr;
