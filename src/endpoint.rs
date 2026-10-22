@@ -9,8 +9,6 @@ pub enum TransportError {
     Build(#[source] http::Error),
     #[error("Failed to send the request")]
     Send(#[source] hyper_util::client::legacy::Error),
-    #[error("The daemon did not answer in time")]
-    Timeout,
     #[error("Failed to read the response body")]
     Body(#[source] hyper::Error),
 }

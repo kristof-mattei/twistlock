@@ -1,7 +1,6 @@
 use std::path::PathBuf;
-use std::time::Duration;
 
-use http_body_util::{BodyExt as _, Full};
+use http_body_util::{BodyExt as _, Collected, Full};
 use hyper::body::{Body, Bytes, Incoming};
 use hyper::{Method, Response};
 use hyper_rustls::{FixedServerNameResolver, HttpsConnector, HttpsConnectorBuilder};
@@ -16,7 +15,6 @@ use rustls::{DEFAULT_VERSIONS, RootCertStore};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use thiserror::Error;
-use tokio::time::timeout;
 use tracing::{Level, event};
 
 use crate::config::Endpoint as ConfigEndpoint;
@@ -103,11 +101,18 @@ where
     Ok(encoded)
 }
 
+async fn read_body(response: Response<Incoming>) -> Result<Bytes, TransportError> {
+    response
+        .collect()
+        .await
+        .map(Collected::to_bytes)
+        .map_err(TransportError::Body)
+}
+
 #[derive(Debug)]
 pub struct Client {
     endpoint: DockerEndpoint,
     uri: http::Uri,
-    docker_timeout: Duration,
 }
 
 impl Client {
@@ -122,7 +127,6 @@ impl Client {
         endpoint: ConfigEndpoint,
         cacert: Option<PathBuf>,
         client_credentials: Option<ClientCredentialPaths>,
-        timeout: Duration,
     ) -> Result<Client, BuildError> {
         let daemon = match endpoint {
             ConfigEndpoint::Direct(url) => {
@@ -160,7 +164,6 @@ impl Client {
                 Client {
                     endpoint: DockerEndpoint::Tls(http_client::build_client(connector)),
                     uri: url,
-                    docker_timeout: timeout,
                 }
             },
             #[cfg(not(windows))]
@@ -172,20 +175,11 @@ impl Client {
                 Client {
                     endpoint: DockerEndpoint::Socket(http_client::build_client(connector)),
                     uri: http::Uri::from_static("http://localhost"),
-                    docker_timeout: timeout,
                 }
             },
         };
 
         Ok(daemon)
-    }
-
-    async fn read_body(&self, response: Response<Incoming>) -> Result<Bytes, TransportError> {
-        match timeout(self.docker_timeout, response.collect()).await {
-            Ok(Ok(collected)) => Ok(collected.to_bytes()),
-            Ok(Err(error)) => Err(TransportError::Body(error)),
-            Err(_elapsed) => Err(TransportError::Timeout),
-        }
     }
 
     async fn send_request<TError>(
@@ -200,18 +194,12 @@ impl Client {
             .map_err(TransportError::Build)?;
 
         let response = match self.endpoint {
-            DockerEndpoint::Tls(ref client) => {
-                timeout(self.docker_timeout, execute_request(client, request)).await
-            },
+            DockerEndpoint::Tls(ref client) => execute_request(client, request).await,
             #[cfg(not(windows))]
-            DockerEndpoint::Socket(ref client) => {
-                timeout(self.docker_timeout, execute_request(client, request)).await
-            },
+            DockerEndpoint::Socket(ref client) => execute_request(client, request).await,
         };
 
-        let response = response
-            .map_err(|_elapsed| TransportError::Timeout)?
-            .map_err(TransportError::Send)?;
+        let response = response.map_err(TransportError::Send)?;
 
         let status_code = response.status();
 
@@ -219,7 +207,7 @@ impl Client {
             return Ok(response);
         }
 
-        let bytes = self.read_body(response).await?;
+        let bytes = read_body(response).await?;
 
         if let Ok(typed_err) = serde_json::from_slice::<TError>(&bytes) {
             return Err(ApiEndpointCallError::Typed(typed_err));
@@ -259,7 +247,7 @@ impl Client {
             .send_request::<E::Error>(&path_and_query, E::METHOD)
             .await?;
 
-        let bytes = self.read_body(response).await?;
+        let bytes = read_body(response).await?;
 
         E::parse_response(&bytes).map_err(|error| {
             event!(Level::ERROR, ?error, message = %String::from_utf8_lossy(&bytes), "Failed to deserialize response");
@@ -461,7 +449,6 @@ mod tests {
     use std::pin::Pin;
     use std::str::FromStr as _;
     use std::task::{Context, Poll};
-    use std::time::Duration;
 
     use http_body_util::Empty;
     use hyper::body::{Body, Bytes, Frame};
@@ -469,8 +456,7 @@ mod tests {
 
     use crate::client::{Client, EventLines, EventStreamError};
     use crate::config::Endpoint;
-    use crate::endpoint::{ApiEndpointCallError, TransportError};
-    use crate::filters::Filters;
+    use crate::endpoint::ApiEndpointCallError;
     use crate::models::events::{Event, EventDecodeError};
 
     struct FailingBody(Option<std::io::Error>);
@@ -620,13 +606,6 @@ mod tests {
 
     /// A dropped sender closes the connection.
     fn serve(head: &'static str) -> (Client, std::sync::mpsc::Sender<String>) {
-        serve_with_timeout(head, Duration::from_secs(5))
-    }
-
-    fn serve_with_timeout(
-        head: &'static str,
-        docker_timeout: Duration,
-    ) -> (Client, std::sync::mpsc::Sender<String>) {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let address = listener.local_addr().unwrap();
         let (body_sender, body_receiver) = std::sync::mpsc::channel::<String>();
@@ -650,26 +629,9 @@ mod tests {
         });
 
         let endpoint = Endpoint::from_str(&format!("tcp://{}", address)).unwrap();
-        let client = Client::build(endpoint, None, None, docker_timeout).unwrap();
+        let client = Client::build(endpoint, None, None).unwrap();
 
         (client, body_sender)
-    }
-
-    #[tokio::test]
-    async fn unsent_body_is_a_timeout() {
-        // the head announces 5 bytes, and the connection stays open without them
-        let (client, _body) = serve_with_timeout(
-            "HTTP/1.1 200 OK\r\ncontent-length: 5\r\n\r\n",
-            Duration::from_millis(100),
-        );
-
-        let Err(ApiEndpointCallError::Transport(error)) =
-            client.list_containers(&Filters::default()).await
-        else {
-            panic!("not a transport error");
-        };
-
-        assert!(matches!(error, TransportError::Timeout));
     }
 
     #[tokio::test]

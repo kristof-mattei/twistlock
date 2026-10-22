@@ -38,7 +38,6 @@ thiserror = "2.0.18"
 tokio = { version = "1.53.0", features = [
     "rt-multi-thread",
     "macros",
-    "time",
     "signal",
     "net",
 ] }
