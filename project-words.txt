@@ -49,6 +49,7 @@ slurpfile
 startport
 startswith
 striptags
+subsec
 taiki
 targetplatformdash
 telem
