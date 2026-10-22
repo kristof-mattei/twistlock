@@ -1,4 +1,4 @@
-use hyper::Method;
+use hyper::{Method, StatusCode};
 
 use crate::endpoint::ApiEndpoint;
 use crate::models::id::NetworkRef;
@@ -16,6 +16,13 @@ impl ApiEndpoint for ListNetworks {
     fn path_and_query(_request: &Self::Request<'_>) -> Result<String, std::io::Error> {
         Ok("/networks".to_owned())
     }
+
+    fn parse_response(
+        _status: StatusCode,
+        bytes: &[u8],
+    ) -> Result<Self::Response, serde_json::Error> {
+        serde_json::from_slice(bytes)
+    }
 }
 
 pub(crate) struct InspectNetwork;
@@ -29,6 +36,13 @@ impl ApiEndpoint for InspectNetwork {
 
     fn path_and_query(request: &Self::Request<'_>) -> Result<String, std::io::Error> {
         Ok(format!("/networks/{}", request.as_str()))
+    }
+
+    fn parse_response(
+        _status: StatusCode,
+        bytes: &[u8],
+    ) -> Result<Self::Response, serde_json::Error> {
+        serde_json::from_slice(bytes)
     }
 }
 
