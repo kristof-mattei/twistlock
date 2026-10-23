@@ -50,6 +50,7 @@ startport
 startswith
 striptags
 subsec
+supertrait
 taiki
 targetplatformdash
 telem
