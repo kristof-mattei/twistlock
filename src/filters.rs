@@ -89,7 +89,7 @@ pub enum Status {
     Dead,
 }
 
-impl std::fmt::Display for Status {
+impl Display for Status {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let value = match *self {
             Status::Created => "created",
@@ -113,7 +113,7 @@ pub enum Health {
     None,
 }
 
-impl std::fmt::Display for Health {
+impl Display for Health {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let value = match *self {
             Health::Starting => "starting",
@@ -133,7 +133,7 @@ pub enum Isolation {
     HyperV,
 }
 
-impl std::fmt::Display for Isolation {
+impl Display for Isolation {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let value = match *self {
             Isolation::Default => "default",
