@@ -1,4 +1,4 @@
-use hyper::{Method, StatusCode};
+use http::{Method, StatusCode};
 
 use crate::endpoint::ApiEndpoint;
 use crate::models::id::NetworkRef;

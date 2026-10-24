@@ -1,17 +1,12 @@
 use std::path::PathBuf;
 
-use http_body_util::{BodyExt as _, Collected, Full};
-use hyper::body::{Body, Bytes, Incoming};
-use hyper::{Method, Response, StatusCode};
-use hyper_rustls::{FixedServerNameResolver, HttpsConnector, HttpsConnectorBuilder};
-#[cfg(not(target_os = "windows"))]
-use hyper_unix_socket::UnixSocketConnector;
-use hyper_util::client::legacy::Client as HttpClient;
-use hyper_util::client::legacy::connect::HttpConnector;
-use rustls::client::ClientConfig;
-use rustls::pki_types::pem::{Error as PemError, PemObject as _};
-use rustls::pki_types::{CertificateDer, DnsName, PrivateKeyDer, ServerName};
-use rustls::{DEFAULT_VERSIONS, RootCertStore};
+use bytes::Bytes;
+use http::uri::Scheme;
+use http::{Method, StatusCode};
+use http_body::Body;
+use http_body_util::BodyExt as _;
+use reqwest::redirect::Policy;
+use reqwest::{Certificate, ClientBuilder, Identity, Response};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tracing::{Level, event};
@@ -24,8 +19,6 @@ use crate::endpoints::containers::{
 };
 use crate::endpoints::networks::{InspectNetwork, ListNetworks};
 use crate::filters::Filters;
-use crate::http_client;
-use crate::http_client::{build_request, execute_request};
 use crate::models::container::{ContainerSummary, StopOutcome, StopTimeout};
 use crate::models::container_inspect::ContainerInspect;
 use crate::models::events::{Event, EventDecodeError};
@@ -33,58 +26,29 @@ use crate::models::id::{ContainerRef, NetworkRef};
 use crate::models::network::{NetworkInspect, NetworkSummary};
 
 #[derive(Debug)]
-pub(crate) enum DockerEndpoint {
-    #[cfg(not(windows))]
-    Socket(HttpClient<UnixSocketConnector<PathBuf>, Full<Bytes>>),
-    Tls(HttpClient<HttpsConnector<HttpConnector>, Full<Bytes>>),
-}
-
-#[derive(Debug)]
 pub struct ClientCredentialPaths {
     pub key: PathBuf,
     pub cert: PathBuf,
 }
 
-struct ClientCredentials {
-    key: PrivateKeyDer<'static>,
-    certs: Vec<CertificateDer<'static>>,
-}
-
 #[derive(Debug, Error)]
 pub enum BuildError {
-    #[error("Failed to read a PEM file")]
-    Pem(#[from] PemError),
-    #[error("Failed to build the TLS configuration")]
-    Tls(#[from] rustls::Error),
-}
-
-fn build_root_cert_store(cacert: Option<PathBuf>) -> Result<RootCertStore, BuildError> {
-    let mut store = RootCertStore::empty();
-
-    if let Some(cacert) = cacert {
-        for cert in CertificateDer::pem_file_iter(cacert)? {
-            store.add(cert?)?;
-        }
-    } else {
-        let native_certs = rustls_native_certs::load_native_certs();
-
-        for error in native_certs.errors {
-            event!(Level::ERROR, ?error, "Failed to load certificate");
-        }
-
-        let (added, ignored) = store.add_parsable_certificates(native_certs.certs);
-
-        if ignored > 0 {
-            event!(
-                Level::WARN,
-                added,
-                ignored,
-                "Ignored unparsable certificates from the OS trust store"
-            );
-        }
-    }
-
-    Ok(store)
+    #[error("Endpoint `{}` is not an absolute `http` or `https` URI", .0)]
+    InvalidEndpoint(http::Uri),
+    #[error("Failed to read `{}`", .path.display())]
+    Read {
+        path: PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
+    #[error("No certificate in the CA file")]
+    EmptyCa,
+    #[error("Failed to parse the CA certificate")]
+    InvalidCa(#[source] reqwest::Error),
+    #[error("Failed to load the client certificate and key")]
+    InvalidIdentity(#[source] reqwest::Error),
+    #[error("Failed to build the HTTP client")]
+    Client(#[source] reqwest::Error),
 }
 
 pub(crate) fn url_encode<T>(filter: &T) -> Result<Box<str>, std::io::Error>
@@ -101,12 +65,8 @@ where
     Ok(encoded)
 }
 
-async fn read_body(response: Response<Incoming>) -> Result<Bytes, TransportError> {
-    response
-        .collect()
-        .await
-        .map(Collected::to_bytes)
-        .map_err(TransportError::Body)
+async fn read_body(response: Response) -> Result<Bytes, TransportError> {
+    response.bytes().await.map_err(TransportError::Body)
 }
 
 #[derive(Deserialize)]
@@ -114,10 +74,50 @@ struct ErrorResponse {
     message: String,
 }
 
+fn without_tls(builder: ClientBuilder) -> ClientBuilder {
+    builder.tls_certs_only([])
+}
+
+fn read(path: PathBuf) -> Result<Vec<u8>, BuildError> {
+    std::fs::read(&path).map_err(|source| BuildError::Read { path, source })
+}
+
+fn with_tls(
+    builder: ClientBuilder,
+    cacert: Option<PathBuf>,
+    client_credentials: Option<ClientCredentialPaths>,
+) -> Result<ClientBuilder, BuildError> {
+    let builder = match cacert {
+        Some(path) => {
+            let certificates =
+                Certificate::from_pem_bundle(&read(path)?).map_err(BuildError::InvalidCa)?;
+
+            if certificates.is_empty() {
+                return Err(BuildError::EmptyCa);
+            }
+
+            builder.tls_certs_only(certificates)
+        },
+        None => builder,
+    };
+
+    match client_credentials {
+        Some(paths) => {
+            // the certificate file can end without a newline
+            let pem = [read(paths.cert)?, read(paths.key)?].join(&b'\n');
+
+            Identity::from_pem(&pem)
+                .map(|identity| builder.identity(identity))
+                .map_err(BuildError::InvalidIdentity)
+        },
+        None => Ok(builder),
+    }
+}
+
 #[derive(Debug)]
 pub struct Client {
-    endpoint: DockerEndpoint,
-    uri: http::Uri,
+    client: reqwest::Client,
+    base_url: String,
 }
 
 impl Client {
@@ -125,66 +125,47 @@ impl Client {
     ///
     /// # Errors
     ///
-    /// * Invalid certificate path / setup
-    /// * `docker_socket_or_uri` is not a valid path or `Uri`
-    #[expect(clippy::missing_panics_doc, reason = "Not needed")]
+    /// See [`BuildError`].
     pub fn build(
         endpoint: ConfigEndpoint,
         cacert: Option<PathBuf>,
         client_credentials: Option<ClientCredentialPaths>,
     ) -> Result<Client, BuildError> {
-        let daemon = match endpoint {
-            ConfigEndpoint::Direct(url) => {
-                let client_credentials = client_credentials
-                    .map(|paths| -> Result<ClientCredentials, BuildError> {
-                        Ok(ClientCredentials {
-                            key: PrivateKeyDer::from_pem_file(paths.key)?,
-                            certs: CertificateDer::pem_file_iter(paths.cert)?
-                                .collect::<Result<Vec<_>, _>>()?,
-                        })
-                    })
-                    .transpose()?;
+        let builder = ClientBuilder::new()
+            .http1_only()
+            .no_proxy()
+            .redirect(Policy::none());
 
-                let root_store = build_root_cert_store(cacert)?;
-
-                let client_config = ClientConfig::builder_with_protocol_versions(DEFAULT_VERSIONS)
-                    .with_root_certificates(root_store);
-
-                let client_config = if let Some(client_credentials) = client_credentials {
-                    client_config
-                        .with_client_auth_cert(client_credentials.certs, client_credentials.key)?
-                } else {
-                    client_config.with_no_client_auth()
+        let (builder, base_url) = match endpoint {
+            ConfigEndpoint::Direct(uri) => {
+                let (Some(scheme), Some(authority)) = (uri.scheme(), uri.authority()) else {
+                    return Err(BuildError::InvalidEndpoint(uri));
                 };
 
-                let connector = HttpsConnectorBuilder::new()
-                    .with_tls_config(client_config)
-                    .https_or_http()
-                    .with_server_name_resolver(FixedServerNameResolver::new(ServerName::DnsName(
-                        DnsName::try_from_str("docker.localhost").unwrap(),
-                    )))
-                    .enable_http1()
-                    .build();
+                let builder = if *scheme == Scheme::HTTPS {
+                    with_tls(builder, cacert, client_credentials)?
+                } else if *scheme == Scheme::HTTP {
+                    without_tls(builder)
+                } else {
+                    return Err(BuildError::InvalidEndpoint(uri));
+                };
 
-                Client {
-                    endpoint: DockerEndpoint::Tls(http_client::build_client(connector)),
-                    uri: url,
-                }
+                (builder, format!("{}://{}", scheme, authority))
             },
             #[cfg(not(windows))]
-            ConfigEndpoint::Socket(path_buf) => {
+            ConfigEndpoint::Socket(path) => {
                 // we're connecting over a socket, so the url is localhost
-
-                let connector: UnixSocketConnector<PathBuf> = UnixSocketConnector::new(path_buf);
-
-                Client {
-                    endpoint: DockerEndpoint::Socket(http_client::build_client(connector)),
-                    uri: http::Uri::from_static("http://localhost"),
-                }
+                (
+                    without_tls(builder.unix_socket(path)),
+                    "http://localhost".to_owned(),
+                )
             },
         };
 
-        Ok(daemon)
+        Ok(Client {
+            client: builder.build().map_err(BuildError::Client)?,
+            base_url,
+        })
     }
 
     async fn send_request(
@@ -192,17 +173,13 @@ impl Client {
         path_and_query: &str,
         method: Method,
         accepts: fn(StatusCode) -> bool,
-    ) -> Result<Response<Incoming>, ApiEndpointCallError> {
-        let request = build_request(self.uri.clone(), path_and_query, method)
-            .map_err(TransportError::Build)?;
-
-        let response = match self.endpoint {
-            DockerEndpoint::Tls(ref client) => execute_request(client, request).await,
-            #[cfg(not(windows))]
-            DockerEndpoint::Socket(ref client) => execute_request(client, request).await,
-        };
-
-        let response = response.map_err(TransportError::Send)?;
+    ) -> Result<Response, ApiEndpointCallError> {
+        let response = self
+            .client
+            .request(method, format!("{}{}", self.base_url, path_and_query))
+            .send()
+            .await
+            .map_err(TransportError::Send)?;
 
         let status_code = response.status();
 
@@ -237,7 +214,7 @@ impl Client {
     ///
     /// * Failure to build the path and query
     /// * Failure to send the request
-    /// * `E::accepts` rejects the response status
+    /// * The endpoint does not accept the status
     /// * Failed to deserialize the response
     pub(crate) async fn call<E: ApiEndpoint>(
         &self,
@@ -372,7 +349,7 @@ impl Client {
             .await?;
 
         Ok(EventSubscription {
-            lines: EventLines::new(response.into_body()),
+            lines: EventLines::new(reqwest::Body::from(response)),
         })
     }
 }
@@ -380,13 +357,13 @@ impl Client {
 #[derive(Debug, Error)]
 pub enum EventStreamError {
     #[error("Failed to read frame")]
-    Frame(#[source] hyper::Error),
+    Frame(#[source] reqwest::Error),
     #[error("The daemon ended the event stream")]
     Ended,
 }
 
 pub struct EventSubscription {
-    lines: EventLines<Incoming>,
+    lines: EventLines<reqwest::Body>,
 }
 
 impl EventSubscription {
@@ -467,19 +444,35 @@ fn decode_event(line: &[u8]) -> Result<Event, EventDecodeError> {
 mod tests {
     use std::collections::VecDeque;
     use std::convert::Infallible;
-    use std::io::{Read as _, Write as _};
+    use std::io::{Read, Write};
     use std::net::TcpListener;
+    #[cfg(unix)]
+    use std::os::unix::net::UnixListener;
+    use std::path::{Path, PathBuf};
     use std::pin::Pin;
     use std::str::FromStr as _;
+    use std::sync::Arc;
     use std::task::{Context, Poll};
 
+    use bytes::Bytes;
+    use http::Uri;
+    use http_body::{Body, Frame};
     use http_body_util::Empty;
-    use hyper::body::{Body, Bytes, Frame};
     use pretty_assertions::assert_eq;
+    use rcgen::{BasicConstraints, CertificateParams, CertifiedIssuer, IsCa, KeyPair};
+    use reqwest::ClientBuilder;
+    use rustls::crypto::aws_lc_rs;
+    use rustls::server::WebPkiClientVerifier;
+    use rustls::{
+        ConfigBuilder, RootCertStore, ServerConfig, ServerConnection, StreamOwned, WantsVerifier,
+    };
+    use tempfile::TempDir;
 
-    use crate::client::{Client, EventLines, EventStreamError};
+    use crate::client::{
+        BuildError, Client, ClientCredentialPaths, EventLines, EventStreamError, with_tls,
+    };
     use crate::config::Endpoint;
-    use crate::endpoint::ApiEndpointCallError;
+    use crate::endpoint::{ApiEndpointCallError, TransportError};
     use crate::models::container::{StopOutcome, StopTimeout};
     use crate::models::events::{Event, EventDecodeError};
     use crate::models::id::ContainerRef;
@@ -630,13 +623,15 @@ mod tests {
     }
 
     /// A dropped sender closes the connection.
-    fn serve(head: &'static str) -> (Client, std::sync::mpsc::Sender<String>) {
-        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
-        let address = listener.local_addr().unwrap();
+    fn spawn_daemon<A, S>(accept: A, head: &'static str) -> std::sync::mpsc::Sender<String>
+    where
+        A: FnOnce() -> S + Send + 'static,
+        S: Read + Write,
+    {
         let (body_sender, body_receiver) = std::sync::mpsc::channel::<String>();
 
         std::thread::spawn(move || {
-            let (mut stream, _) = listener.accept().unwrap();
+            let mut stream = accept();
 
             let mut request = Vec::new();
             let mut byte = [0_u8; 1];
@@ -653,10 +648,89 @@ mod tests {
             }
         });
 
+        body_sender
+    }
+
+    fn serve(head: &'static str) -> (Client, std::sync::mpsc::Sender<String>) {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let body = spawn_daemon(move || listener.accept().unwrap().0, head);
+
         let endpoint = Endpoint::from_str(&format!("tcp://{}", address)).unwrap();
         let client = Client::build(endpoint, None, None).unwrap();
 
-        (client, body_sender)
+        (client, body)
+    }
+
+    fn write(directory: &Path, name: &str, contents: &str) -> PathBuf {
+        let path = directory.join(name);
+
+        std::fs::write(&path, contents).unwrap();
+
+        path
+    }
+
+    fn certificate_authority() -> CertifiedIssuer<'static, KeyPair> {
+        let mut params = CertificateParams::default();
+        params.is_ca = IsCa::Ca(BasicConstraints::Unconstrained);
+
+        CertifiedIssuer::self_signed(params, KeyPair::generate().unwrap()).unwrap()
+    }
+
+    fn daemon_config() -> ConfigBuilder<ServerConfig, WantsVerifier> {
+        ServerConfig::builder_with_provider(Arc::new(aws_lc_rs::default_provider()))
+            .with_safe_default_protocol_versions()
+            .unwrap()
+    }
+
+    fn serve_tls(
+        config: ServerConfig,
+        head: &'static str,
+    ) -> (Uri, std::sync::mpsc::Sender<String>) {
+        let config = Arc::new(config);
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let body = spawn_daemon(
+            move || {
+                StreamOwned::new(
+                    ServerConnection::new(config).unwrap(),
+                    listener.accept().unwrap().0,
+                )
+            },
+            head,
+        );
+
+        (format!("https://{}", address).parse().unwrap(), body)
+    }
+
+    fn tls_client(
+        uri: Uri,
+        cacert: Option<PathBuf>,
+        client_credentials: Option<ClientCredentialPaths>,
+    ) -> Client {
+        Client::build(Endpoint::Direct(uri), cacert, client_credentials).unwrap()
+    }
+
+    #[test]
+    fn build_without_a_scheme_is_an_invalid_endpoint() {
+        let endpoint = Endpoint::Direct(Uri::from_static("localhost:2375"));
+
+        let error = Client::build(endpoint, None, None).unwrap_err();
+
+        assert!(matches!(error, BuildError::InvalidEndpoint(_)));
+        assert_eq!(
+            error.to_string(),
+            "Endpoint `localhost:2375` is not an absolute `http` or `https` URI"
+        );
+    }
+
+    #[test]
+    fn build_with_a_tcp_scheme_is_an_invalid_endpoint() {
+        let endpoint = Endpoint::Direct(Uri::from_static("tcp://localhost:2375"));
+
+        let error = Client::build(endpoint, None, None).unwrap_err();
+
+        assert!(matches!(error, BuildError::InvalidEndpoint(_)));
     }
 
     #[tokio::test]
@@ -704,6 +778,27 @@ mod tests {
     #[tokio::test]
     async fn stop_with_no_content_is_stopped() {
         let (client, _body) = serve("HTTP/1.1 204 No Content\r\n\r\n");
+
+        let outcome = client
+            .stop_container(ContainerRef::IdOrName("ubuntu"), StopTimeout::Default)
+            .await
+            .unwrap();
+
+        assert!(matches!(outcome, StopOutcome::Stopped));
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn stop_over_a_socket_is_stopped() {
+        let directory = TempDir::new().unwrap();
+        let path = directory.path().join("docker.sock");
+        let listener = UnixListener::bind(&path).unwrap();
+        let _body = spawn_daemon(
+            move || listener.accept().unwrap().0,
+            "HTTP/1.1 204 No Content\r\n\r\n",
+        );
+
+        let client = Client::build(Endpoint::Socket(path), None, None).unwrap();
 
         let outcome = client
             .stop_container(ContainerRef::IdOrName("ubuntu"), StopTimeout::Default)
@@ -767,5 +862,172 @@ mod tests {
 
         assert_eq!(status, 500);
         assert_eq!(body, r#"{"error":"boom"}"#);
+    }
+
+    #[tokio::test]
+    async fn stop_over_mutual_tls_is_stopped() {
+        let ca = certificate_authority();
+
+        let daemon_key = KeyPair::generate().unwrap();
+        let daemon_cert = CertificateParams::new(["127.0.0.1".to_owned()])
+            .unwrap()
+            .signed_by(&daemon_key, &ca)
+            .unwrap();
+
+        let client_key = KeyPair::generate().unwrap();
+        let client_cert = CertificateParams::default()
+            .signed_by(&client_key, &ca)
+            .unwrap();
+
+        let mut roots = RootCertStore::empty();
+        roots.add(ca.der().clone()).unwrap();
+
+        let config = daemon_config()
+            .with_client_cert_verifier(
+                WebPkiClientVerifier::builder_with_provider(
+                    Arc::new(roots),
+                    Arc::new(aws_lc_rs::default_provider()),
+                )
+                .build()
+                .unwrap(),
+            )
+            .with_single_cert(vec![daemon_cert.der().clone()], daemon_key.into())
+            .unwrap();
+
+        let (uri, _body) = serve_tls(config, "HTTP/1.1 204 No Content\r\n\r\n");
+
+        let directory = TempDir::new().unwrap();
+
+        let client = tls_client(
+            uri,
+            Some(write(directory.path(), "ca.pem", &ca.pem())),
+            Some(ClientCredentialPaths {
+                cert: write(directory.path(), "cert.pem", &client_cert.pem()),
+                key: write(directory.path(), "key.pem", &client_key.serialize_pem()),
+            }),
+        );
+
+        let outcome = client
+            .stop_container(ContainerRef::IdOrName("ubuntu"), StopTimeout::Default)
+            .await
+            .unwrap();
+
+        assert!(matches!(outcome, StopOutcome::Stopped));
+    }
+
+    #[tokio::test]
+    async fn daemon_certificate_from_another_ca_is_a_send_error() {
+        let daemon_key = KeyPair::generate().unwrap();
+        let daemon_cert = CertificateParams::new(["127.0.0.1".to_owned()])
+            .unwrap()
+            .self_signed(&daemon_key)
+            .unwrap();
+
+        let config = Arc::new(
+            daemon_config()
+                .with_no_client_auth()
+                .with_single_cert(vec![daemon_cert.der().clone()], daemon_key.into())
+                .unwrap(),
+        );
+
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+
+        std::thread::spawn(move || {
+            let mut stream = StreamOwned::new(
+                ServerConnection::new(config).unwrap(),
+                listener.accept().unwrap().0,
+            );
+
+            stream.read(&mut [0_u8; 1]).unwrap_err();
+        });
+
+        let directory = TempDir::new().unwrap();
+
+        let client = tls_client(
+            format!("https://{}", address).parse().unwrap(),
+            Some(write(
+                directory.path(),
+                "ca.pem",
+                &certificate_authority().pem(),
+            )),
+            None,
+        );
+
+        let result = client
+            .stop_container(ContainerRef::IdOrName("ubuntu"), StopTimeout::Default)
+            .await;
+
+        assert!(matches!(
+            result,
+            Err(ApiEndpointCallError::Transport(TransportError::Send(_)))
+        ));
+    }
+
+    #[test]
+    fn unparsable_ca_file_is_an_invalid_ca_error() {
+        let directory = TempDir::new().unwrap();
+
+        let result = with_tls(
+            ClientBuilder::new(),
+            Some(write(
+                directory.path(),
+                "ca.pem",
+                "-----BEGIN CERTIFICATE-----\n!\n-----END CERTIFICATE-----\n",
+            )),
+            None,
+        );
+
+        assert!(matches!(result, Err(BuildError::InvalidCa(_))));
+    }
+
+    #[test]
+    fn ca_file_without_a_certificate_is_an_empty_ca_error() {
+        let directory = TempDir::new().unwrap();
+
+        let result = with_tls(
+            ClientBuilder::new(),
+            Some(write(
+                directory.path(),
+                "ca.pem",
+                &KeyPair::generate().unwrap().serialize_pem(),
+            )),
+            None,
+        );
+
+        assert!(matches!(result, Err(BuildError::EmptyCa)));
+    }
+
+    #[test]
+    fn missing_ca_file_is_a_read_error() {
+        let directory = TempDir::new().unwrap();
+        let ca_cert = directory.path().join("ca.pem");
+
+        let Err(BuildError::Read { path, .. }) =
+            with_tls(ClientBuilder::new(), Some(ca_cert.clone()), None)
+        else {
+            panic!("not a read error");
+        };
+
+        assert_eq!(path, ca_cert);
+    }
+
+    #[test]
+    fn key_file_without_a_key_is_an_invalid_identity_error() {
+        let directory = TempDir::new().unwrap();
+        let cert = CertificateParams::default()
+            .self_signed(&KeyPair::generate().unwrap())
+            .unwrap();
+
+        let result = with_tls(
+            ClientBuilder::new(),
+            None,
+            Some(ClientCredentialPaths {
+                cert: write(directory.path(), "cert.pem", &cert.pem()),
+                key: write(directory.path(), "key.pem", "not a key"),
+            }),
+        );
+
+        assert!(matches!(result, Err(BuildError::InvalidIdentity(_))));
     }
 }
