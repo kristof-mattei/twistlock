@@ -1,4 +1,4 @@
-use hyper::{Method, StatusCode};
+use http::{Method, StatusCode};
 
 use crate::client::url_encode;
 use crate::endpoint::ApiEndpoint;
@@ -142,7 +142,7 @@ mod tests {
     use std::time::Duration;
 
     use hashbrown::{HashMap, HashSet};
-    use hyper::StatusCode;
+    use http::StatusCode;
     use pretty_assertions::assert_eq;
 
     use crate::client::url_encode;
