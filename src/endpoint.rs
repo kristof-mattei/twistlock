@@ -1,15 +1,12 @@
-use http::StatusCode;
-use hyper::Method;
+use http::{Method, StatusCode};
 use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum TransportError {
-    #[error("Failed to build the request")]
-    Build(#[source] http::Error),
     #[error("Failed to send the request")]
-    Send(#[source] hyper_util::client::legacy::Error),
+    Send(#[source] reqwest::Error),
     #[error("Failed to read the response body")]
-    Body(#[source] hyper::Error),
+    Body(#[source] reqwest::Error),
 }
 
 /// Error type for endpoint calls.
