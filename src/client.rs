@@ -1,17 +1,12 @@
 use std::path::PathBuf;
 
-use http_body_util::{BodyExt as _, Collected, Full};
-use hyper::body::{Body, Bytes, Incoming};
-use hyper::{Method, Response, StatusCode};
-use hyper_rustls::{FixedServerNameResolver, HttpsConnector, HttpsConnectorBuilder};
-#[cfg(not(target_os = "windows"))]
-use hyper_unix_socket::UnixSocketConnector;
-use hyper_util::client::legacy::Client as HttpClient;
-use hyper_util::client::legacy::connect::HttpConnector;
-use rustls::client::ClientConfig;
-use rustls::pki_types::pem::{Error as PemError, PemObject as _};
-use rustls::pki_types::{CertificateDer, DnsName, PrivateKeyDer, ServerName};
-use rustls::{DEFAULT_VERSIONS, RootCertStore};
+use bytes::Bytes;
+use http::uri::Authority;
+use http::{Method, StatusCode};
+use http_body::Body;
+use http_body_util::BodyExt as _;
+use reqwest::redirect::Policy;
+use reqwest::{Certificate, ClientBuilder, Identity, Response};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tracing::{Level, event};
@@ -24,8 +19,6 @@ use crate::endpoints::containers::{
 };
 use crate::endpoints::networks::{InspectNetwork, ListNetworks};
 use crate::filters::Filters;
-use crate::http_client;
-use crate::http_client::{build_request, execute_request};
 use crate::models::container::{ContainerSummary, StopOutcome, StopTimeout};
 use crate::models::container_inspect::ContainerInspect;
 use crate::models::events::{Event, EventDecodeError};
@@ -33,58 +26,25 @@ use crate::models::id::{ContainerRef, NetworkRef};
 use crate::models::network::{NetworkInspect, NetworkSummary};
 
 #[derive(Debug)]
-pub(crate) enum DockerEndpoint {
-    #[cfg(not(windows))]
-    Socket(HttpClient<UnixSocketConnector<PathBuf>, Full<Bytes>>),
-    Tls(HttpClient<HttpsConnector<HttpConnector>, Full<Bytes>>),
-}
-
-#[derive(Debug)]
 pub struct ClientCredentialPaths {
     pub key: PathBuf,
     pub cert: PathBuf,
 }
 
-struct ClientCredentials {
-    key: PrivateKeyDer<'static>,
-    certs: Vec<CertificateDer<'static>>,
-}
-
 #[derive(Debug, Error)]
 pub enum BuildError {
-    #[error("Failed to read a PEM file")]
-    Pem(#[from] PemError),
-    #[error("Failed to build the TLS configuration")]
-    Tls(#[from] rustls::Error),
-}
-
-fn build_root_cert_store(cacert: Option<PathBuf>) -> Result<RootCertStore, BuildError> {
-    let mut store = RootCertStore::empty();
-
-    if let Some(cacert) = cacert {
-        for cert in CertificateDer::pem_file_iter(cacert)? {
-            store.add(cert?)?;
-        }
-    } else {
-        let native_certs = rustls_native_certs::load_native_certs();
-
-        for error in native_certs.errors {
-            event!(Level::ERROR, ?error, "Failed to load certificate");
-        }
-
-        let (added, ignored) = store.add_parsable_certificates(native_certs.certs);
-
-        if ignored > 0 {
-            event!(
-                Level::WARN,
-                added,
-                ignored,
-                "Ignored unparsable certificates from the OS trust store"
-            );
-        }
-    }
-
-    Ok(store)
+    #[error("Failed to read `{}`", .path.display())]
+    Read {
+        path: PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
+    #[error("The CA certificate file holds no certificate")]
+    EmptyCa,
+    #[error("Failed to parse a TLS certificate or key")]
+    Pem(#[source] reqwest::Error),
+    #[error("Failed to build the HTTP client")]
+    Client(#[source] reqwest::Error),
 }
 
 pub(crate) fn url_encode<T>(filter: &T) -> Result<Box<str>, std::io::Error>
@@ -101,12 +61,8 @@ where
     Ok(encoded)
 }
 
-async fn read_body(response: Response<Incoming>) -> Result<Bytes, TransportError> {
-    response
-        .collect()
-        .await
-        .map(Collected::to_bytes)
-        .map_err(TransportError::Body)
+async fn read_body(response: Response) -> Result<Bytes, TransportError> {
+    response.bytes().await.map_err(TransportError::Body)
 }
 
 #[derive(Deserialize)]
@@ -114,10 +70,48 @@ struct ErrorResponse {
     message: String,
 }
 
+fn read_file(path: PathBuf) -> Result<Vec<u8>, BuildError> {
+    std::fs::read(&path).map_err(|source| BuildError::Read { path, source })
+}
+
+fn with_tls(
+    builder: ClientBuilder,
+    cacert: Option<PathBuf>,
+    client_credentials: Option<ClientCredentialPaths>,
+) -> Result<ClientBuilder, BuildError> {
+    let builder = match cacert {
+        Some(cacert) => {
+            let roots =
+                Certificate::from_pem_bundle(&read_file(cacert)?).map_err(BuildError::Pem)?;
+
+            if roots.is_empty() {
+                return Err(BuildError::EmptyCa);
+            }
+
+            builder.tls_certs_only(roots)
+        },
+        None => builder,
+    };
+
+    let builder = match client_credentials {
+        Some(paths) => {
+            let mut identity = read_file(paths.cert)?;
+
+            identity.push(b'\n');
+            identity.extend_from_slice(&read_file(paths.key)?);
+
+            builder.identity(Identity::from_pem(&identity).map_err(BuildError::Pem)?)
+        },
+        None => builder,
+    };
+
+    Ok(builder)
+}
+
 #[derive(Debug)]
 pub struct Client {
-    endpoint: DockerEndpoint,
-    uri: http::Uri,
+    client: reqwest::Client,
+    base_url: String,
 }
 
 impl Client {
@@ -125,66 +119,35 @@ impl Client {
     ///
     /// # Errors
     ///
-    /// * Invalid certificate path / setup
-    /// * `docker_socket_or_uri` is not a valid path or `Uri`
-    #[expect(clippy::missing_panics_doc, reason = "Not needed")]
+    /// See [`BuildError`].
     pub fn build(
         endpoint: ConfigEndpoint,
         cacert: Option<PathBuf>,
         client_credentials: Option<ClientCredentialPaths>,
     ) -> Result<Client, BuildError> {
-        let daemon = match endpoint {
-            ConfigEndpoint::Direct(url) => {
-                let client_credentials = client_credentials
-                    .map(|paths| -> Result<ClientCredentials, BuildError> {
-                        Ok(ClientCredentials {
-                            key: PrivateKeyDer::from_pem_file(paths.key)?,
-                            certs: CertificateDer::pem_file_iter(paths.cert)?
-                                .collect::<Result<Vec<_>, _>>()?,
-                        })
-                    })
-                    .transpose()?;
+        let builder = ClientBuilder::new().no_proxy().redirect(Policy::none());
 
-                let root_store = build_root_cert_store(cacert)?;
+        let (builder, base_url) = match endpoint {
+            ConfigEndpoint::Direct(uri) => {
+                let base_url = format!(
+                    "{}://{}",
+                    uri.scheme_str().unwrap_or_default(),
+                    uri.authority().map_or("", Authority::as_str)
+                );
 
-                let client_config = ClientConfig::builder_with_protocol_versions(DEFAULT_VERSIONS)
-                    .with_root_certificates(root_store);
-
-                let client_config = if let Some(client_credentials) = client_credentials {
-                    client_config
-                        .with_client_auth_cert(client_credentials.certs, client_credentials.key)?
-                } else {
-                    client_config.with_no_client_auth()
-                };
-
-                let connector = HttpsConnectorBuilder::new()
-                    .with_tls_config(client_config)
-                    .https_or_http()
-                    .with_server_name_resolver(FixedServerNameResolver::new(ServerName::DnsName(
-                        DnsName::try_from_str("docker.localhost").unwrap(),
-                    )))
-                    .enable_http1()
-                    .build();
-
-                Client {
-                    endpoint: DockerEndpoint::Tls(http_client::build_client(connector)),
-                    uri: url,
-                }
+                (with_tls(builder, cacert, client_credentials)?, base_url)
             },
             #[cfg(not(windows))]
-            ConfigEndpoint::Socket(path_buf) => {
+            ConfigEndpoint::Socket(path) => {
                 // we're connecting over a socket, so the url is localhost
-
-                let connector: UnixSocketConnector<PathBuf> = UnixSocketConnector::new(path_buf);
-
-                Client {
-                    endpoint: DockerEndpoint::Socket(http_client::build_client(connector)),
-                    uri: http::Uri::from_static("http://localhost"),
-                }
+                (builder.unix_socket(path), "http://localhost".to_owned())
             },
         };
 
-        Ok(daemon)
+        Ok(Client {
+            client: builder.build().map_err(BuildError::Client)?,
+            base_url,
+        })
     }
 
     async fn send_request(
@@ -192,17 +155,13 @@ impl Client {
         path_and_query: &str,
         method: Method,
         accepts: fn(StatusCode) -> bool,
-    ) -> Result<Response<Incoming>, ApiEndpointCallError> {
-        let request = build_request(self.uri.clone(), path_and_query, method)
-            .map_err(TransportError::Build)?;
-
-        let response = match self.endpoint {
-            DockerEndpoint::Tls(ref client) => execute_request(client, request).await,
-            #[cfg(not(windows))]
-            DockerEndpoint::Socket(ref client) => execute_request(client, request).await,
-        };
-
-        let response = response.map_err(TransportError::Send)?;
+    ) -> Result<Response, ApiEndpointCallError> {
+        let response = self
+            .client
+            .request(method, format!("{}{}", self.base_url, path_and_query))
+            .send()
+            .await
+            .map_err(TransportError::Send)?;
 
         let status_code = response.status();
 
@@ -371,6 +330,8 @@ impl Client {
             .send_request("/events", Method::GET, |status| status.is_success())
             .await?;
 
+        let response: http::Response<reqwest::Body> = response.into();
+
         Ok(EventSubscription {
             lines: EventLines::new(response.into_body()),
         })
@@ -380,13 +341,13 @@ impl Client {
 #[derive(Debug, Error)]
 pub enum EventStreamError {
     #[error("Failed to read frame")]
-    Frame(#[source] hyper::Error),
+    Frame(#[source] reqwest::Error),
     #[error("The daemon ended the event stream")]
     Ended,
 }
 
 pub struct EventSubscription {
-    lines: EventLines<Incoming>,
+    lines: EventLines<reqwest::Body>,
 }
 
 impl EventSubscription {
@@ -473,8 +434,9 @@ mod tests {
     use std::str::FromStr as _;
     use std::task::{Context, Poll};
 
+    use bytes::Bytes;
+    use http_body::{Body, Frame};
     use http_body_util::Empty;
-    use hyper::body::{Body, Bytes, Frame};
     use pretty_assertions::assert_eq;
 
     use crate::client::{Client, EventLines, EventStreamError};
