@@ -20,5 +20,5 @@ fn http_endpoint_builds_without_system_ca_certificates() {
 
     let endpoint = Endpoint::from_str("tcp://127.0.0.1:2375").unwrap();
 
-    Client::build(endpoint, None, None).unwrap();
+    Client::build(endpoint).unwrap();
 }

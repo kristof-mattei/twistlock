@@ -4,8 +4,10 @@ A custom library to interact with the docker daemon
 
 # Features
 
-- Connect over HTTPS
-- Connect over Socket (Linux only)
+- Connect over TCP
+- Connect over a Unix socket (Unix only)
+- Connect over a named pipe (Windows only)
+- Resolve the host from `DOCKER_HOST` like the Docker CLI
 
 ## License
 
