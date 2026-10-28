@@ -8,7 +8,6 @@ use crate::config::{ParseError, TcpAddress, TcpHost, Transport};
 
 const DEFAULT_TCP_HOST: &str = "localhost";
 const DEFAULT_TCP_PORT: u16 = 2375;
-const DEFAULT_TLS_PORT: u16 = 2376;
 #[cfg(unix)]
 const DEFAULT_UNIX_SOCKET: &str = "/var/run/docker.sock";
 #[cfg(windows)]
@@ -39,14 +38,6 @@ pub(super) fn parse_host(value: &str) -> Result<Transport, ParseError> {
         "npipe" => Err(ParseError::UnsupportedHost(value.to_owned())),
         "fd" | "ssh" => Err(ParseError::UnsupportedHost(value.to_owned())),
         _ => Err(ParseError::InvalidBindAddress(value.to_owned())),
-    }
-}
-
-pub(super) fn default_tls_address() -> TcpAddress {
-    TcpAddress {
-        host: TcpHost::Name(DEFAULT_TCP_HOST.to_owned()),
-        port: DEFAULT_TLS_PORT,
-        base_path: String::new(),
     }
 }
 
