@@ -57,6 +57,10 @@ taiki
 targetplatformdash
 telem
 tera
+tlscacert
+tlscert
+tlskey
+tlsverify
 topo
 tostring
 trixie
@@ -67,6 +71,7 @@ uninspectable
 unseparated
 urlencode
 usernamehw
+userprofile
 vadimcn
 whoogle
 zizmor

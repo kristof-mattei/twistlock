@@ -8,6 +8,7 @@ use crate::config::{ParseError, TcpAddress, TcpHost, Transport};
 
 const DEFAULT_TCP_HOST: &str = "localhost";
 const DEFAULT_TCP_PORT: u16 = 2375;
+const DEFAULT_TLS_PORT: u16 = 2376;
 #[cfg(unix)]
 const DEFAULT_UNIX_SOCKET: &str = "/var/run/docker.sock";
 #[cfg(windows)]
@@ -26,7 +27,7 @@ pub(super) fn parse_host(value: &str) -> Result<Transport, ParseError> {
     let (proto, addr) = value.split_once("://").unwrap_or(("tcp", value));
 
     match proto {
-        "tcp" => parse_tcp_addr(value, addr).map(Transport::Tcp),
+        "tcp" => parse_tcp_addr(value, addr).map(|address| Transport::Tcp { address, tls: None }),
         #[cfg(unix)]
         "unix" => parse_socket_addr("unix", addr, DEFAULT_UNIX_SOCKET)
             .map(|path| Transport::Unix(PathBuf::from(path))),
@@ -38,6 +39,14 @@ pub(super) fn parse_host(value: &str) -> Result<Transport, ParseError> {
         "npipe" => Err(ParseError::UnsupportedHost(value.to_owned())),
         "fd" | "ssh" => Err(ParseError::UnsupportedHost(value.to_owned())),
         _ => Err(ParseError::InvalidBindAddress(value.to_owned())),
+    }
+}
+
+pub(super) fn default_tls_address() -> TcpAddress {
+    TcpAddress {
+        host: TcpHost::Name(DEFAULT_TCP_HOST.to_owned()),
+        port: DEFAULT_TLS_PORT,
+        base_path: String::new(),
     }
 }
 
@@ -219,7 +228,7 @@ mod tests {
             ("tcp://192.168.0.1:2375", false),
             ("tcp://[::2]:2375", false),
         ] {
-            let Ok(Transport::Tcp(address)) = parse_host(value) else {
+            let Ok(Transport::Tcp { address, .. }) = parse_host(value) else {
                 panic!("not a TCP host: `{}`", value);
             };
 
