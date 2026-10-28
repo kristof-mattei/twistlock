@@ -1,3 +1,4 @@
+use std::path::PathBuf;
 use std::time::Duration;
 
 use bytes::Bytes;
@@ -5,12 +6,12 @@ use http::{Method, StatusCode};
 use http_body::Body;
 use http_body_util::BodyExt as _;
 use reqwest::redirect::Policy;
-use reqwest::{ClientBuilder, Response};
+use reqwest::{Certificate, ClientBuilder, Identity, Response};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tracing::{Level, event};
 
-use crate::config::{Endpoint, TcpAddress, Transport};
+use crate::config::{Endpoint, TcpAddress, Tls, Transport};
 use crate::endpoint::{ApiEndpoint, ApiEndpointCallError, TransportError};
 use crate::endpoints::containers::{
     InspectContainer, ListContainers, RestartContainer, RestartContainerRequest, StopContainer,
@@ -29,6 +30,16 @@ const SOCKET_BASE_URL: &str = "http://api.moby.localhost";
 
 #[derive(Debug, Error)]
 pub enum BuildError {
+    #[error("Failed to read `{}`", .path.display())]
+    Read {
+        path: PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
+    #[error("Failed to parse the CA certificate")]
+    InvalidCa(#[source] reqwest::Error),
+    #[error("Failed to load the client certificate and key")]
+    InvalidIdentity(#[source] reqwest::Error),
     #[error("Failed to build the HTTP client")]
     Client(#[source] reqwest::Error),
 }
@@ -66,6 +77,32 @@ fn without_loopback_proxy(builder: ClientBuilder, address: &TcpAddress) -> Clien
 
 fn without_tls(builder: ClientBuilder) -> ClientBuilder {
     builder.tls_certs_only([])
+}
+
+fn read(path: PathBuf) -> Result<Vec<u8>, BuildError> {
+    std::fs::read(&path).map_err(|source| BuildError::Read { path, source })
+}
+
+fn with_tls(builder: ClientBuilder, tls: Tls) -> Result<ClientBuilder, BuildError> {
+    let builder = match (tls.verify, tls.ca_cert) {
+        (true, Some(path)) => Certificate::from_pem_bundle(&read(path)?)
+            .map(|certificates| builder.tls_certs_only(certificates))
+            .map_err(BuildError::InvalidCa)?,
+        (true, None) => builder,
+        (false, _) => builder.tls_danger_accept_invalid_certs(true),
+    };
+
+    match tls.client_credentials {
+        Some(paths) => {
+            // the certificate file can end without a newline
+            let pem = [read(paths.cert)?, read(paths.key)?].join(&b'\n');
+
+            Identity::from_pem(&pem)
+                .map(|identity| builder.identity(identity))
+                .map_err(BuildError::InvalidIdentity)
+        },
+        None => Ok(builder),
+    }
 }
 
 #[derive(Debug)]
@@ -106,9 +143,16 @@ impl Client {
                 without_tls(builder.windows_named_pipe(pipe)),
                 SOCKET_BASE_URL.to_owned(),
             ),
-            Transport::Tcp(address) => (
+            Transport::Tcp { address, tls: None } => (
                 without_tls(without_loopback_proxy(builder, &address)),
                 format!("http://{}", address),
+            ),
+            Transport::Tcp {
+                address,
+                tls: Some(tls),
+            } => (
+                with_tls(without_loopback_proxy(builder, &address), tls)?,
+                format!("https://{}", address),
             ),
         };
 
@@ -398,20 +442,28 @@ mod tests {
     use std::net::TcpListener;
     #[cfg(unix)]
     use std::os::unix::net::UnixListener;
+    use std::path::{Path, PathBuf};
     use std::pin::Pin;
     use std::str::FromStr as _;
+    use std::sync::Arc;
     use std::task::{Context, Poll};
 
     use bytes::Bytes;
     use http_body::{Body, Frame};
     use http_body_util::Empty;
     use pretty_assertions::assert_eq;
-    #[cfg(unix)]
+    use rcgen::{BasicConstraints, CertificateParams, CertifiedIssuer, IsCa, KeyPair};
+    use reqwest::ClientBuilder;
+    use rustls::crypto::aws_lc_rs;
+    use rustls::server::WebPkiClientVerifier;
+    use rustls::{
+        ConfigBuilder, RootCertStore, ServerConfig, ServerConnection, StreamOwned, WantsVerifier,
+    };
     use tempfile::TempDir;
 
-    use crate::client::{Client, EventLines, EventStreamError};
-    use crate::config::Endpoint;
-    use crate::endpoint::ApiEndpointCallError;
+    use crate::client::{BuildError, Client, EventLines, EventStreamError, with_tls};
+    use crate::config::{ClientCredentialPaths, Endpoint, Tls};
+    use crate::endpoint::{ApiEndpointCallError, TransportError};
     use crate::models::container::{StopOutcome, StopTimeout};
     use crate::models::events::{Event, EventDecodeError};
     use crate::models::id::ContainerRef;
@@ -601,6 +653,52 @@ mod tests {
         (client, body)
     }
 
+    fn write(directory: &Path, name: &str, contents: &str) -> PathBuf {
+        let path = directory.join(name);
+
+        std::fs::write(&path, contents).unwrap();
+
+        path
+    }
+
+    fn certificate_authority() -> CertifiedIssuer<'static, KeyPair> {
+        let mut params = CertificateParams::default();
+        params.is_ca = IsCa::Ca(BasicConstraints::Unconstrained);
+
+        CertifiedIssuer::self_signed(params, KeyPair::generate().unwrap()).unwrap()
+    }
+
+    fn daemon_config() -> ConfigBuilder<ServerConfig, WantsVerifier> {
+        ServerConfig::builder_with_provider(Arc::new(aws_lc_rs::default_provider()))
+            .with_safe_default_protocol_versions()
+            .unwrap()
+    }
+
+    /// Returns the daemon's `DOCKER_HOST`.
+    fn serve_tls(
+        config: ServerConfig,
+        head: &'static str,
+    ) -> (String, std::sync::mpsc::Sender<String>) {
+        let config = Arc::new(config);
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let body = spawn_daemon(
+            move || {
+                StreamOwned::new(
+                    ServerConnection::new(config).unwrap(),
+                    listener.accept().unwrap().0,
+                )
+            },
+            head,
+        );
+
+        (format!("tcp://{}", address), body)
+    }
+
+    fn tls_client(host: &str, tls: Tls) -> Client {
+        Client::build(Endpoint::from_str(host).unwrap().with_tls(tls)).unwrap()
+    }
+
     #[tokio::test]
     async fn response_head_returns_the_subscription() {
         let (client, body) = serve("HTTP/1.1 200 OK\r\ntransfer-encoding: chunked\r\n\r\n");
@@ -731,5 +829,218 @@ mod tests {
 
         assert_eq!(status, 500);
         assert_eq!(body, r#"{"error":"boom"}"#);
+    }
+
+    #[tokio::test]
+    async fn stop_over_mutual_tls_is_stopped() {
+        let ca = certificate_authority();
+
+        let daemon_key = KeyPair::generate().unwrap();
+        let daemon_cert = CertificateParams::new(["127.0.0.1".to_owned()])
+            .unwrap()
+            .signed_by(&daemon_key, &ca)
+            .unwrap();
+
+        let client_key = KeyPair::generate().unwrap();
+        let client_cert = CertificateParams::default()
+            .signed_by(&client_key, &ca)
+            .unwrap();
+
+        let mut roots = RootCertStore::empty();
+        roots.add(ca.der().clone()).unwrap();
+
+        let config = daemon_config()
+            .with_client_cert_verifier(
+                WebPkiClientVerifier::builder_with_provider(
+                    Arc::new(roots),
+                    Arc::new(aws_lc_rs::default_provider()),
+                )
+                .build()
+                .unwrap(),
+            )
+            .with_single_cert(vec![daemon_cert.der().clone()], daemon_key.into())
+            .unwrap();
+
+        let (host, _body) = serve_tls(config, "HTTP/1.1 204 No Content\r\n\r\n");
+
+        let directory = TempDir::new().unwrap();
+
+        let client = tls_client(
+            &host,
+            Tls {
+                verify: true,
+                ca_cert: Some(write(directory.path(), "ca.pem", &ca.pem())),
+                client_credentials: Some(ClientCredentialPaths {
+                    cert: write(directory.path(), "cert.pem", &client_cert.pem()),
+                    key: write(directory.path(), "key.pem", &client_key.serialize_pem()),
+                }),
+            },
+        );
+
+        let outcome = client
+            .stop_container(ContainerRef::IdOrName("ubuntu"), StopTimeout::Default)
+            .await
+            .unwrap();
+
+        assert!(matches!(outcome, StopOutcome::Stopped));
+    }
+
+    #[tokio::test]
+    async fn stop_over_unverified_tls_is_stopped() {
+        let daemon_key = KeyPair::generate().unwrap();
+        let daemon_cert = CertificateParams::new(["127.0.0.1".to_owned()])
+            .unwrap()
+            .self_signed(&daemon_key)
+            .unwrap();
+
+        let config = daemon_config()
+            .with_no_client_auth()
+            .with_single_cert(vec![daemon_cert.der().clone()], daemon_key.into())
+            .unwrap();
+
+        let (host, _body) = serve_tls(config, "HTTP/1.1 204 No Content\r\n\r\n");
+
+        let client = tls_client(
+            &host,
+            Tls {
+                verify: false,
+                ca_cert: None,
+                client_credentials: None,
+            },
+        );
+
+        let outcome = client
+            .stop_container(ContainerRef::IdOrName("ubuntu"), StopTimeout::Default)
+            .await
+            .unwrap();
+
+        assert!(matches!(outcome, StopOutcome::Stopped));
+    }
+
+    #[tokio::test]
+    async fn daemon_certificate_from_another_ca_is_a_send_error() {
+        let daemon_key = KeyPair::generate().unwrap();
+        let daemon_cert = CertificateParams::new(["127.0.0.1".to_owned()])
+            .unwrap()
+            .self_signed(&daemon_key)
+            .unwrap();
+
+        let config = Arc::new(
+            daemon_config()
+                .with_no_client_auth()
+                .with_single_cert(vec![daemon_cert.der().clone()], daemon_key.into())
+                .unwrap(),
+        );
+
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+
+        std::thread::spawn(move || {
+            let mut stream = StreamOwned::new(
+                ServerConnection::new(config).unwrap(),
+                listener.accept().unwrap().0,
+            );
+
+            stream.read(&mut [0_u8; 1]).unwrap_err();
+        });
+
+        let directory = TempDir::new().unwrap();
+
+        let client = tls_client(
+            &format!("tcp://{}", address),
+            Tls {
+                verify: true,
+                ca_cert: Some(write(
+                    directory.path(),
+                    "ca.pem",
+                    &certificate_authority().pem(),
+                )),
+                client_credentials: None,
+            },
+        );
+
+        let result = client
+            .stop_container(ContainerRef::IdOrName("ubuntu"), StopTimeout::Default)
+            .await;
+
+        assert!(matches!(
+            result,
+            Err(ApiEndpointCallError::Transport(TransportError::Send(_)))
+        ));
+    }
+
+    #[test]
+    fn unparsable_ca_file_is_an_invalid_ca_error() {
+        let directory = TempDir::new().unwrap();
+
+        let result = with_tls(
+            ClientBuilder::new(),
+            Tls {
+                verify: true,
+                ca_cert: Some(write(
+                    directory.path(),
+                    "ca.pem",
+                    "-----BEGIN CERTIFICATE-----\n!\n-----END CERTIFICATE-----\n",
+                )),
+                client_credentials: None,
+            },
+        );
+
+        assert!(matches!(result, Err(BuildError::InvalidCa(_))));
+    }
+
+    #[test]
+    fn missing_ca_file_is_a_read_error() {
+        let directory = TempDir::new().unwrap();
+        let ca_cert = directory.path().join("ca.pem");
+
+        let Err(BuildError::Read { path, .. }) = with_tls(
+            ClientBuilder::new(),
+            Tls {
+                verify: true,
+                ca_cert: Some(ca_cert.clone()),
+                client_credentials: None,
+            },
+        ) else {
+            panic!("not a read error");
+        };
+
+        assert_eq!(path, ca_cert);
+    }
+
+    #[test]
+    fn missing_ca_file_without_verification_is_not_read() {
+        let directory = TempDir::new().unwrap();
+
+        tls_client(
+            "tcp://localhost:2376",
+            Tls {
+                verify: false,
+                ca_cert: Some(directory.path().join("ca.pem")),
+                client_credentials: None,
+            },
+        );
+    }
+
+    #[test]
+    fn key_file_without_a_key_is_an_invalid_identity_error() {
+        let directory = TempDir::new().unwrap();
+        let cert = CertificateParams::default()
+            .self_signed(&KeyPair::generate().unwrap())
+            .unwrap();
+
+        let result = with_tls(
+            ClientBuilder::new(),
+            Tls {
+                verify: true,
+                ca_cert: None,
+                client_credentials: Some(ClientCredentialPaths {
+                    cert: write(directory.path(), "cert.pem", &cert.pem()),
+                    key: write(directory.path(), "key.pem", "not a key"),
+                }),
+            },
+        );
+
+        assert!(matches!(result, Err(BuildError::InvalidIdentity(_))));
     }
 }
