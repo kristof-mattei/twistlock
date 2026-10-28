@@ -1,4 +1,39 @@
 <!-- header goes here -->
+## [0.9.0](https://github.com/kristof-mattei/twistlock/compare/v0.8.1..v0.9.0) - 2026-10-28
+
+### ⚠️ Breaking Changes
+
+- *(client)* Remove the request timeout from `Client::build` by [@kristof-mattei](https://github.com/kristof-mattei) ([`d50f4c3`](https://github.com/kristof-mattei/twistlock/commit/d50f4c39d5e3a69f51cf65bf34bd24cbc23793f0))
+
+  `Client::build` no longer takes a timeout, and `TransportError::Timeout` no longer exists. To limit a call, wrap it in `tokio::time::timeout`, with a limit above the grace period for a restart:
+
+    ```rust
+    let containers =
+        tokio::time::timeout(Duration::from_secs(30), client.list_containers(&filters)).await??;
+    ```
+- *(client)* Take a `StopTimeout` in `restart_container` by [@kristof-mattei](https://github.com/kristof-mattei) ([`7e7500b`](https://github.com/kristof-mattei/twistlock/commit/7e7500b6e815b9a4c32aabb1c4c811c73b6a5685))
+
+  `restart_container` takes a `StopTimeout` instead of a `Duration`. To keep sending a timeout, pass `StopTimeout::After(timeout)`; a partial second now rounds up instead of down.
+- Make `Client::call`, `ApiEndpoint` and the endpoint types crate-private by [@kristof-mattei](https://github.com/kristof-mattei) ([`1703fc9`](https://github.com/kristof-mattei/twistlock/commit/1703fc9ff72301249c8f732edb4aa1ded4b937b6))
+- Make `ApiEndpointCallError` non-generic with a `Daemon` variant from `ErrorResponse` by [@kristof-mattei](https://github.com/kristof-mattei) ([`ad7e330`](https://github.com/kristof-mattei/twistlock/commit/ad7e3300aa15d9ba1f974762226983b92608fd95))
+
+  A daemon error is `ApiEndpointCallError::Daemon { status, message }` instead of `Typed`. Any other error body is `HttpError` instead of `Generic`.
+- *(client)* Switch the HTTP client to `reqwest` by [@kristof-mattei](https://github.com/kristof-mattei) ([`9c64585`](https://github.com/kristof-mattei/twistlock/commit/9c6458547f6e94a1191dd4fb55702e9c1c61a7f5))
+
+  `TransportError::Send`, `TransportError::Body` and `EventStreamError::Frame` wrap a `reqwest::Error`, and `TransportError::Build` is gone. `BuildError` is now `InvalidEndpoint`, `Provider`, `Read`, `EmptyCa`, `InvalidCa`, `SystemCa`, `InvalidIdentity` and `Client`. `Client::build` rejects a `Direct` endpoint with a scheme other than `http` or `https`. `cacert` and `client_credentials` are read only for an `https` endpoint, which verifies the daemon certificate against the host in its URI instead of `docker.localhost`. Without `cacert`, macOS and Windows verify the daemon certificate through the operating system instead of webpki and the native certificate store.
+- *(config)* Resolve the host like the Docker CLI by [@kristof-mattei](https://github.com/kristof-mattei) ([`3e19e88`](https://github.com/kristof-mattei/twistlock/commit/3e19e880a6c5784c30c188d15bebab2226fd834a))
+
+  Build an `Endpoint` with `parse` or `Endpoint::from_env`. A host without a scheme is assumed to be TCP.
+- *(config)* Resolve TLS like the Docker CLI by [@kristof-mattei](https://github.com/kristof-mattei) ([`46bd688`](https://github.com/kristof-mattei/twistlock/commit/46bd688b7c06240c7bcc0cd3fb16d62bc33f59a4))
+- *(config)* Remove `Endpoint::from_env` by [@kristof-mattei](https://github.com/kristof-mattei) ([`9ae4148`](https://github.com/kristof-mattei/twistlock/commit/9ae41484750128bc0a8e5956c2b74f8f7849d528))
+
+### 🚀 Features
+
+- *(client)* Add `stop_container` by [@kristof-mattei](https://github.com/kristof-mattei) ([`b7d9915`](https://github.com/kristof-mattei/twistlock/commit/b7d99157f16c5e7dce9245d86de54919ce0afe16))
+
+### 🐛 Bug Fixes
+
+- *(client)* Reject a CA file without a certificate by [@kristof-mattei](https://github.com/kristof-mattei) ([`572ae75`](https://github.com/kristof-mattei/twistlock/commit/572ae75e115e3136ca248d7ffde4e3b720bfb910))
 ## [0.8.1](https://github.com/kristof-mattei/twistlock/compare/v0.8.0..v0.8.1) - 2026-10-07
 
 ### 🐛 Bug Fixes
@@ -7,10 +42,10 @@
 - *(deps)* Raise `tokio` to 1.53.0 for `hyper-unix-socket` 0.7.0 by [@kristof-mattei](https://github.com/kristof-mattei) ([`21a103a`](https://github.com/kristof-mattei/twistlock/commit/21a103a46a45fcfc564fc0aa80befee52c5b3499))
 ## [0.8.0](https://github.com/kristof-mattei/twistlock/compare/v0.7.0..v0.8.0) - 2026-09-21
 
-### 🚀 Features
+### ⚠️ Breaking Changes
 
-- *(client)* [**breaking**] Replace `produce_events` with a pull-based `EventSubscription` by [@kristof-mattei](https://github.com/kristof-mattei) ([`613ba6e`](https://github.com/kristof-mattei/twistlock/commit/613ba6ea42174abe1a6be8906c370d0a251a4016))
-- [**breaking**] Return typed errors instead of `eyre::Report` by [@kristof-mattei](https://github.com/kristof-mattei) ([`f571219`](https://github.com/kristof-mattei/twistlock/commit/f57121917ae2150b8441c8115ccb0d6cebb1265e))
+- *(client)* Replace `produce_events` with a pull-based `EventSubscription` by [@kristof-mattei](https://github.com/kristof-mattei) ([`613ba6e`](https://github.com/kristof-mattei/twistlock/commit/613ba6ea42174abe1a6be8906c370d0a251a4016))
+- Return typed errors instead of `eyre::Report` by [@kristof-mattei](https://github.com/kristof-mattei) ([`f571219`](https://github.com/kristof-mattei/twistlock/commit/f57121917ae2150b8441c8115ccb0d6cebb1265e))
 
 ### 🐛 Bug Fixes
 
@@ -24,9 +59,9 @@
 - Check the public API of a pull request with `cargo semver-checks` by [@kristof-mattei](https://github.com/kristof-mattei) ([`51480b7`](https://github.com/kristof-mattei/twistlock/commit/51480b7ca5b4631890a19d17164b9c62d16ac012))
 ## [0.7.0](https://github.com/kristof-mattei/twistlock/compare/v0.6.0..v0.7.0) - 2026-09-19
 
-### 🚀 Features
+### ⚠️ Breaking Changes
 
-- *(filters)* [**breaking**] Add the `isolation` filter by [@kristof-mattei](https://github.com/kristof-mattei) ([`a6d15db`](https://github.com/kristof-mattei/twistlock/commit/a6d15dbcfd0dcb0af786ce5049d1fa6024924a47))
+- *(filters)* Add the `isolation` filter by [@kristof-mattei](https://github.com/kristof-mattei) ([`a6d15db`](https://github.com/kristof-mattei/twistlock/commit/a6d15dbcfd0dcb0af786ce5049d1fa6024924a47))
 
 ### 🐛 Bug Fixes
 
@@ -45,24 +80,27 @@
 - *(codeql)* Install mold before the Rust analysis by [@kristof-mattei](https://github.com/kristof-mattei) ([`57ea65e`](https://github.com/kristof-mattei/twistlock/commit/57ea65e196db2aa5643351b8f5de254ad035cba6))
 ## [0.6.0](https://github.com/kristof-mattei/twistlock/compare/v0.5.0..v0.6.0) - 2026-09-18
 
-### 🚀 Features
+### ⚠️ Breaking Changes
 
-- *(models)* [**breaking**] Type `ContainerSummary::state` as `Status` by [@kristof-mattei](https://github.com/kristof-mattei) ([`40a09d8`](https://github.com/kristof-mattei/twistlock/commit/40a09d83c8e7674128b0f884bc10fa8ec93a0998))
+- *(models)* Type `ContainerSummary::state` as `Status` by [@kristof-mattei](https://github.com/kristof-mattei) ([`40a09d8`](https://github.com/kristof-mattei/twistlock/commit/40a09d83c8e7674128b0f884bc10fa8ec93a0998))
+- *(models)* Remove `EventBody::scope` and `EventScope` by [@kristof-mattei](https://github.com/kristof-mattei) ([`b3866e8`](https://github.com/kristof-mattei/twistlock/commit/b3866e8ab0d727ef44190f69e204c5dbb4be4979))
 
 ### 🐛 Bug Fixes
 
 - *(client)* Return a failed frame read from `produce_events` by [@kristof-mattei](https://github.com/kristof-mattei) ([`1598313`](https://github.com/kristof-mattei/twistlock/commit/15983133d73cea777a0df07ee140164328c57544))
-
-### 🚜 Refactor
-
-- *(models)* [**breaking**] Remove `EventBody::scope` and `EventScope` by [@kristof-mattei](https://github.com/kristof-mattei) ([`b3866e8`](https://github.com/kristof-mattei/twistlock/commit/b3866e8ab0d727ef44190f69e204c5dbb4be4979))
 ## [0.5.0](https://github.com/kristof-mattei/twistlock/compare/v0.4.0..v0.5.0) - 2026-09-17
+
+### ⚠️ Breaking Changes
+
+- *(models)* Make `Event` an enum over its type by [@kristof-mattei](https://github.com/kristof-mattei) ([`f8496fc`](https://github.com/kristof-mattei/twistlock/commit/f8496fc5671461bea96978024b311cb9df6f177e))
+- *(models)* Split `Event::Other` into the documented kinds by [@kristof-mattei](https://github.com/kristof-mattei) ([`b938862`](https://github.com/kristof-mattei/twistlock/commit/b938862f7fbee85f930aef1b0eb91b67afa03b2f))
+- *(models)* Type the container and network IDs by [@kristof-mattei](https://github.com/kristof-mattei) ([`84f98f0`](https://github.com/kristof-mattei/twistlock/commit/84f98f0f4c8d2edc1a932f23a60768fdbc8b795f))
+- *(client)* Take `ContainerRef` and `NetworkRef` in the ID-taking methods by [@kristof-mattei](https://github.com/kristof-mattei) ([`508f72c`](https://github.com/kristof-mattei/twistlock/commit/508f72cbad2d4e57e829e37f2e26e87fe07efb87))
+- *(client)* Send an undecodable event as `EventDecodeError` by [@kristof-mattei](https://github.com/kristof-mattei) ([`841ab93`](https://github.com/kristof-mattei/twistlock/commit/841ab934bbca5b0bca177b5629b7cc14bd42dbf2))
+- *(endpoint)* Let `ApiEndpoint::Request` borrow by [@kristof-mattei](https://github.com/kristof-mattei) ([`b55e05e`](https://github.com/kristof-mattei/twistlock/commit/b55e05ea33ad62959cc275abcaa70694f78a971c))
 
 ### 🚀 Features
 
-- *(client)* [**breaking**] Take `ContainerRef` and `NetworkRef` in the ID-taking methods by [@kristof-mattei](https://github.com/kristof-mattei) ([`508f72c`](https://github.com/kristof-mattei/twistlock/commit/508f72cbad2d4e57e829e37f2e26e87fe07efb87))
-- *(client)* [**breaking**] Send an undecodable event as `EventDecodeError` by [@kristof-mattei](https://github.com/kristof-mattei) ([`841ab93`](https://github.com/kristof-mattei/twistlock/commit/841ab934bbca5b0bca177b5629b7cc14bd42dbf2))
-- *(models)* [**breaking**] Type the container and network IDs by [@kristof-mattei](https://github.com/kristof-mattei) ([`84f98f0`](https://github.com/kristof-mattei/twistlock/commit/84f98f0f4c8d2edc1a932f23a60768fdbc8b795f))
 - *(models)* Implement `FromStr` for `NetworkId` by [@kristof-mattei](https://github.com/kristof-mattei) ([`8438440`](https://github.com/kristof-mattei/twistlock/commit/843844060af97858d41115a5b585afa8c72ef190))
 - *(models)* Expose `NetworkID` on container networks by [@kristof-mattei](https://github.com/kristof-mattei) ([`8f36cf6`](https://github.com/kristof-mattei/twistlock/commit/8f36cf6fb91c839e4ba7a37274e0e231050e8089))
 
@@ -70,21 +108,15 @@
 
 - *(client)* Use the error type of `InspectNetwork` in `inspect_network` by [@kristof-mattei](https://github.com/kristof-mattei) ([`880da2d`](https://github.com/kristof-mattei/twistlock/commit/880da2d5dd855be6f5e13f3767de7d79a249c39c))
 - *(filters)* Derive `Eq` and `Hash` on `Status` by [@kristof-mattei](https://github.com/kristof-mattei) ([`062ca3d`](https://github.com/kristof-mattei/twistlock/commit/062ca3dd30d8afe0932cc96f97a4525fc59a10a3))
-
-### 🚜 Refactor
-
-- *(endpoint)* [**breaking**] Let `ApiEndpoint::Request` borrow by [@kristof-mattei](https://github.com/kristof-mattei) ([`b55e05e`](https://github.com/kristof-mattei/twistlock/commit/b55e05ea33ad62959cc275abcaa70694f78a971c))
-- *(models)* [**breaking**] Make `Event` an enum over its type by [@kristof-mattei](https://github.com/kristof-mattei) ([`f8496fc`](https://github.com/kristof-mattei/twistlock/commit/f8496fc5671461bea96978024b311cb9df6f177e))
-- *(models)* [**breaking**] Split `Event::Other` into the documented kinds by [@kristof-mattei](https://github.com/kristof-mattei) ([`b938862`](https://github.com/kristof-mattei/twistlock/commit/b938862f7fbee85f930aef1b0eb91b67afa03b2f))
 ## [0.4.0](https://github.com/kristof-mattei/twistlock/compare/v0.3.1..v0.4.0) - 2026-09-15
+
+### ⚠️ Breaking Changes
+
+- *(models)* Rename `Container` to `ContainerSummary` by [@kristof-mattei](https://github.com/kristof-mattei) ([`647e8d5`](https://github.com/kristof-mattei/twistlock/commit/647e8d563278222d5098aec8ffaebb0b572f4dc5))
 
 ### 🚀 Features
 
 - *(models)* Expose `DNSNames` on container networks by [@kristof-mattei](https://github.com/kristof-mattei) ([`59537fe`](https://github.com/kristof-mattei/twistlock/commit/59537fee1238e1c03dac950e7debf8cf0b42536b))
-
-### 🚜 Refactor
-
-- *(models)* [**breaking**] Rename `Container` to `ContainerSummary` by [@kristof-mattei](https://github.com/kristof-mattei) ([`647e8d5`](https://github.com/kristof-mattei/twistlock/commit/647e8d563278222d5098aec8ffaebb0b572f4dc5))
 
 ### 🧪 Testing
 
@@ -96,15 +128,17 @@
 - *(filters)* The default container list includes paused and restarting by [@kristof-mattei](https://github.com/kristof-mattei) ([`bcc4b11`](https://github.com/kristof-mattei/twistlock/commit/bcc4b112ee2ddf44753fab65b32d984110cdf4cf))
 ## [0.3.0](https://github.com/kristof-mattei/twistlock/compare/v0.2.1..v0.3.0) - 2026-09-03
 
+### ⚠️ Breaking Changes
+
+- Couple the client key and cert into `ClientCredentialPaths` by [@kristof-mattei](https://github.com/kristof-mattei) ([`d90bc80`](https://github.com/kristof-mattei/twistlock/commit/d90bc80f8a500af122bc04bef59ef56402cd1a69))
+
+  `Client::build` takes `Option<ClientCredentialPaths>` instead of separate `client_key` and `client_cert` options. Callers provide both paths in the struct, or neither.
+
 ### 🐛 Bug Fixes
 
 - Build all features for docs by [@kristof-mattei](https://github.com/kristof-mattei) ([`1b0ba83`](https://github.com/kristof-mattei/twistlock/commit/1b0ba83f88bceb28563c1e88ea5e1e55a1760c2a))
 - Load all certificates from `cacert` and client cert PEM files by [@kristof-mattei](https://github.com/kristof-mattei) ([`3e2937d`](https://github.com/kristof-mattei/twistlock/commit/3e2937dc5809f34d369d02bc6308082a117a8322))
 - Tolerate unparsable certificates in the OS trust store by [@kristof-mattei](https://github.com/kristof-mattei) ([`137fe41`](https://github.com/kristof-mattei/twistlock/commit/137fe4109eaef1834cd5a02efb76241d3ada0cbd))
-
-### 🚜 Refactor
-
-- [**breaking**] Couple the client key and cert into `ClientCredentialPaths` by [@kristof-mattei](https://github.com/kristof-mattei) ([`d90bc80`](https://github.com/kristof-mattei/twistlock/commit/d90bc80f8a500af122bc04bef59ef56402cd1a69))
 
 ### ⚙️ Miscellaneous Tasks
 
@@ -127,9 +161,9 @@
 - Restore by [@kristof-mattei](https://github.com/kristof-mattei) ([`6365114`](https://github.com/kristof-mattei/twistlock/commit/6365114bc6be25a2fff8f66a7859c3d217c2d575))
 ## [0.2.0](https://github.com/kristof-mattei/twistlock/compare/v0.1.2..v0.2.0) - 2026-04-17
 
-### 🚀 Features
+### ⚠️ Breaking Changes
 
-- [**breaking**] Get_name now only returns the first name by [@kristof-mattei](https://github.com/kristof-mattei) ([`ea4d6f2`](https://github.com/kristof-mattei/twistlock/commit/ea4d6f2ebf9ac429888a3c9d0325667473d8059c))
+- Get_name now only returns the first name by [@kristof-mattei](https://github.com/kristof-mattei) ([`ea4d6f2`](https://github.com/kristof-mattei/twistlock/commit/ea4d6f2ebf9ac429888a3c9d0325667473d8059c))
 
 ### ⚙️ Miscellaneous Tasks
 
