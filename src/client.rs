@@ -36,6 +36,8 @@ pub enum BuildError {
         #[source]
         source: std::io::Error,
     },
+    #[error("No certificate in the CA file")]
+    EmptyCa,
     #[error("Failed to parse the CA certificate")]
     InvalidCa(#[source] reqwest::Error),
     #[error("Failed to load the client certificate and key")]
@@ -85,9 +87,16 @@ fn read(path: PathBuf) -> Result<Vec<u8>, BuildError> {
 
 fn with_tls(builder: ClientBuilder, tls: Tls) -> Result<ClientBuilder, BuildError> {
     let builder = match (tls.verify, tls.ca_cert) {
-        (true, Some(path)) => Certificate::from_pem_bundle(&read(path)?)
-            .map(|certificates| builder.tls_certs_only(certificates))
-            .map_err(BuildError::InvalidCa)?,
+        (true, Some(path)) => {
+            let certificates =
+                Certificate::from_pem_bundle(&read(path)?).map_err(BuildError::InvalidCa)?;
+
+            if certificates.is_empty() {
+                return Err(BuildError::EmptyCa);
+            }
+
+            builder.tls_certs_only(certificates)
+        },
         (true, None) => builder,
         (false, _) => builder.tls_danger_accept_invalid_certs(true),
     };
@@ -987,6 +996,26 @@ mod tests {
         );
 
         assert!(matches!(result, Err(BuildError::InvalidCa(_))));
+    }
+
+    #[test]
+    fn ca_file_without_a_certificate_is_an_empty_ca_error() {
+        let directory = TempDir::new().unwrap();
+
+        let result = with_tls(
+            ClientBuilder::new(),
+            Tls {
+                verify: true,
+                ca_cert: Some(write(
+                    directory.path(),
+                    "ca.pem",
+                    &KeyPair::generate().unwrap().serialize_pem(),
+                )),
+                client_credentials: None,
+            },
+        );
+
+        assert!(matches!(result, Err(BuildError::EmptyCa)));
     }
 
     #[test]
