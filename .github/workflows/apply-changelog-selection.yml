@@ -32,7 +32,7 @@ jobs:
     steps:
       # zizmor: ignore[artipacked] the release branch is pushed with this credential, see the rebuild step
       - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           # The job can start after Release has rebuilt the branch, so the event SHA would rebuild on a stale base
           ref: ${{ github.event.pull_request.head.ref }}
@@ -42,7 +42,7 @@ jobs:
           token: ${{ secrets.TOKEN_TO_TRIGGER_SUBSEQUENT_WORKFLOWS }}
 
       - name: Install git-cliff
-        uses: taiki-e/install-action@f7e5d7c961414b23f5b25b2da9294395d08513ad # v2.87.26
+        uses: taiki-e/install-action@v2.88.0
         with:
           tool: git-cliff
 

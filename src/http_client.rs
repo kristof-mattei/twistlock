@@ -1,4 +1,3 @@
-use std::convert::Into;
 use std::str::FromStr as _;
 
 use hashbrown::HashMap;
@@ -100,7 +99,7 @@ where
     Ok(request)
 }
 
-pub fn build_client<C, B>(connector: C) -> Client<C, B>
+pub(crate) fn build_client<C, B>(connector: C) -> Client<C, B>
 where
     C: Connect + Clone + Send + Sync + 'static,
     B: Body + Send,
@@ -114,7 +113,7 @@ where
 /// # Errors
 ///
 /// When the request errors.
-pub async fn execute_request<C, B>(
+pub(crate) async fn execute_request<C, B>(
     client: &Client<C, B>,
     request: Request<B>,
 ) -> Result<Response<hyper::body::Incoming>, hyper_util::client::legacy::Error>

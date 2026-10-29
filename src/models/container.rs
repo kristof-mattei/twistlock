@@ -18,7 +18,7 @@ where
     impl<'de> Visitor<'de> for SeqVisitor {
         type Value = Box<[Box<str>]>;
 
-        fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
             formatter.write_str("a nonempty sequence of items")
         }
 
