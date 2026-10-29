@@ -7,7 +7,7 @@ use crate::models::container::{ContainerSummary, StopTimeout};
 use crate::models::container_inspect::ContainerInspect;
 use crate::models::id::ContainerRef;
 
-pub struct ListContainers;
+pub(crate) struct ListContainers;
 
 impl ApiEndpoint for ListContainers {
     type Request<'r> = Filters;
@@ -29,7 +29,7 @@ impl ApiEndpoint for ListContainers {
     }
 }
 
-pub struct InspectContainer;
+pub(crate) struct InspectContainer;
 
 impl ApiEndpoint for InspectContainer {
     type Request<'r> = ContainerRef<'r>;
@@ -59,12 +59,12 @@ fn stop_timeout_path(container: &ContainerRef<'_>, action: &str, timeout: StopTi
     }
 }
 
-pub struct RestartContainerRequest<'r> {
+pub(crate) struct RestartContainerRequest<'r> {
     pub container: ContainerRef<'r>,
     pub timeout: StopTimeout,
 }
 
-pub struct RestartContainer;
+pub(crate) struct RestartContainer;
 
 impl ApiEndpoint for RestartContainer {
     type Request<'r> = RestartContainerRequest<'r>;
