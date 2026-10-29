@@ -3,6 +3,7 @@ use std::net::{Ipv4Addr, Ipv6Addr};
 use hashbrown::HashMap;
 use serde::Deserialize;
 
+use crate::filters::{Health, Status};
 use crate::models::deserializers::{deserialize_empty_as_none, deserialize_null_as_empty};
 use crate::models::id::{ContainerId, NetworkId};
 
@@ -27,6 +28,14 @@ pub struct ContainerConfig {
 #[serde(rename_all = "PascalCase")]
 pub struct ContainerState {
     pub running: bool,
+    pub status: Status,
+    pub health: Option<ContainerHealth>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct ContainerHealth {
+    pub status: Health,
 }
 
 #[derive(Debug, Deserialize)]
@@ -71,11 +80,63 @@ mod tests {
 
     use pretty_assertions::assert_eq;
 
-    use super::ContainerNetwork;
+    use super::{ContainerNetwork, ContainerState};
+    use crate::filters::{Health, Status};
     use crate::models::id::NetworkId;
 
     fn parse(json: &str) -> Result<ContainerNetwork, serde_json::Error> {
         serde_json::from_str(json)
+    }
+
+    fn parse_state(json: &str) -> Result<ContainerState, serde_json::Error> {
+        serde_json::from_str(json)
+    }
+
+    #[test]
+    fn state_without_health_check() {
+        let state = parse_state(r#"{"Running":true,"Status":"running"}"#).unwrap();
+
+        assert_eq!(state.status, Status::Running);
+        assert!(state.health.is_none());
+    }
+
+    #[test]
+    fn state_parses_every_health_status() {
+        for (health, expected) in [
+            ("starting", Health::Starting),
+            ("healthy", Health::Healthy),
+            ("unhealthy", Health::Unhealthy),
+            ("none", Health::None),
+        ] {
+            let input = format!(
+                r#"{{"Running":true,"Status":"running","Health":{{"Status":"{}","FailingStreak":0}}}}"#,
+                health
+            );
+
+            let state = parse_state(&input).unwrap();
+
+            assert_eq!(state.health.map(|health| health.status), Some(expected));
+        }
+    }
+
+    #[test]
+    fn state_of_a_stopped_container_keeps_its_health() {
+        let state = parse_state(
+            r#"{"Running":false,"Status":"exited","Health":{"Status":"unhealthy","FailingStreak":6}}"#,
+        )
+        .unwrap();
+
+        assert_eq!(state.status, Status::Exited);
+        assert_eq!(
+            state.health.map(|health| health.status),
+            Some(Health::Unhealthy)
+        );
+    }
+
+    #[test]
+    fn state_rejects_an_unknown_health_status() {
+        parse_state(r#"{"Running":true,"Status":"running","Health":{"Status":"sickly"}}"#)
+            .unwrap_err();
     }
 
     #[test]
