@@ -1,4 +1,10 @@
 <!-- header goes here -->
+## [0.10.0](https://github.com/kristof-mattei/twistlock/compare/v0.9.0..v0.10.0) - 2026-10-29
+
+### 🚀 Features
+
+- *(config)* Restore `Clone` on `Endpoint` by [@kristof-mattei](https://github.com/kristof-mattei) ([`4ba1178`](https://github.com/kristof-mattei/twistlock/commit/4ba11785a9c16e6654793684f5a49e4f08cd091c))
+- *(config)* Restore `Debug` on `Endpoint` by [@kristof-mattei](https://github.com/kristof-mattei) ([`8b98d34`](https://github.com/kristof-mattei/twistlock/commit/8b98d348c889ff1f09e5e1485b0991ea590b8395))
 ## [0.9.0](https://github.com/kristof-mattei/twistlock/compare/v0.8.1..v0.9.0) - 2026-10-29
 
 ### ⚠️ Breaking Changes
