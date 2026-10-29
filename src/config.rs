@@ -9,29 +9,38 @@ use thiserror::Error;
 
 /// A Docker endpoint, parsed from a `DOCKER_HOST` value.
 pub struct Endpoint {
-    transport: Transport,
+    host: Host,
 }
 
 impl Endpoint {
-    /// Connects over TLS. A socket ignores `tls`.
+    /// Connects over TLS, to `tcp://localhost:2376` for an empty host. A socket ignores `tls`.
     #[must_use]
     pub fn with_tls(self, tls: Tls) -> Endpoint {
-        let transport = match self.transport {
+        let transport = match self.host {
+            Host::Default => Transport::Tcp {
+                address: host::default_tls_address(),
+                tls: Some(tls),
+            },
             #[cfg(unix)]
-            Transport::Unix(path) => Transport::Unix(path),
+            Host::Explicit(Transport::Unix(path)) => Transport::Unix(path),
             #[cfg(windows)]
-            Transport::NamedPipe(pipe) => Transport::NamedPipe(pipe),
-            Transport::Tcp { address, .. } => Transport::Tcp {
+            Host::Explicit(Transport::NamedPipe(pipe)) => Transport::NamedPipe(pipe),
+            Host::Explicit(Transport::Tcp { address, .. }) => Transport::Tcp {
                 address,
                 tls: Some(tls),
             },
         };
 
-        Endpoint { transport }
+        Endpoint {
+            host: Host::Explicit(transport),
+        }
     }
 
     pub(crate) fn into_transport(self) -> Transport {
-        self.transport
+        match self.host {
+            Host::Default => host::default_socket(),
+            Host::Explicit(transport) => transport,
+        }
     }
 }
 
@@ -40,21 +49,24 @@ impl FromStr for Endpoint {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         Ok(Endpoint {
-            transport: host::parse_host(s)?,
+            host: host::parse_host(s)?,
         })
     }
 }
 
 impl Display for Endpoint {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self.transport {
-            #[cfg(unix)]
-            Transport::Unix(ref path) => write!(f, "unix://{}", path.display()),
-            #[cfg(windows)]
-            Transport::NamedPipe(ref pipe) => write!(f, "npipe://{}", pipe),
-            Transport::Tcp { ref address, .. } => write!(f, "tcp://{}", address),
+        match self.host {
+            Host::Default => host::default_socket().fmt(f),
+            Host::Explicit(ref transport) => transport.fmt(f),
         }
     }
+}
+
+enum Host {
+    /// An empty `DOCKER_HOST`.
+    Default,
+    Explicit(Transport),
 }
 
 pub(crate) enum Transport {
@@ -66,6 +78,18 @@ pub(crate) enum Transport {
         address: TcpAddress,
         tls: Option<Tls>,
     },
+}
+
+impl Display for Transport {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match *self {
+            #[cfg(unix)]
+            Transport::Unix(ref path) => write!(f, "unix://{}", path.display()),
+            #[cfg(windows)]
+            Transport::NamedPipe(ref pipe) => write!(f, "npipe://{}", pipe),
+            Transport::Tcp { ref address, .. } => write!(f, "tcp://{}", address),
+        }
+    }
 }
 
 pub(crate) struct TcpAddress {
@@ -127,8 +151,17 @@ pub enum ParseError {
 
 #[cfg(test)]
 mod tests {
-    #[cfg(unix)]
-    use crate::config::{Endpoint, Tls, Transport};
+    use pretty_assertions::assert_eq;
+
+    use crate::config::{Endpoint, Host, Tls, Transport};
+
+    fn tls() -> Tls {
+        Tls {
+            verify: true,
+            ca_cert: None,
+            client_credentials: None,
+        }
+    }
 
     #[cfg(unix)]
     #[test]
@@ -136,15 +169,33 @@ mod tests {
         let endpoint = "unix:///run/docker.sock"
             .parse::<Endpoint>()
             .unwrap()
-            .with_tls(Tls {
-                verify: true,
-                ca_cert: None,
-                client_credentials: None,
-            });
+            .with_tls(tls());
 
         assert!(
-            matches!(endpoint.transport, Transport::Unix(_)),
+            matches!(endpoint.host, Host::Explicit(Transport::Unix(_))),
             "a socket has no TLS"
         );
+    }
+
+    #[test]
+    fn empty_host_with_tls_is_localhost_2376() {
+        let endpoint = "".parse::<Endpoint>().unwrap().with_tls(tls());
+
+        let Host::Explicit(Transport::Tcp {
+            address,
+            tls: Some(_),
+        }) = endpoint.host
+        else {
+            panic!("not a TLS host");
+        };
+
+        assert_eq!(address.to_string(), "localhost:2376");
+    }
+
+    #[test]
+    fn bare_tcp_host_with_tls_is_localhost_2375() {
+        let endpoint = "tcp://".parse::<Endpoint>().unwrap().with_tls(tls());
+
+        assert_eq!(endpoint.to_string(), "tcp://localhost:2375");
     }
 }
