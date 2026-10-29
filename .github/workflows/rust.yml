@@ -344,7 +344,7 @@ jobs:
         if: |
           github.event_name != 'pull_request' ||
           github.event.pull_request.head.repo.full_name == github.repository
-        uses: EnricoMi/publish-unit-test-result-action/windows@v2.24.0
+        uses: EnricoMi/publish-unit-test-result-action/windows@v2.25.0
         with:
           check_name: Test results Windows
           github_token: ${{ secrets.GITHUB_TOKEN }}
