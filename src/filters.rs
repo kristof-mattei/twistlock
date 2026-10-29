@@ -105,7 +105,8 @@ impl Display for Status {
     }
 }
 
-#[derive(Eq, PartialEq, Hash, Debug)]
+#[derive(Deserialize, Eq, PartialEq, Hash, Debug)]
+#[serde(rename_all = "lowercase")]
 pub enum Health {
     Starting,
     Healthy,
