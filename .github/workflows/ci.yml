@@ -40,7 +40,7 @@ jobs:
       architectures: ${{ steps.matrix.outputs.architectures }}
     steps:
       - name: Build matrix
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        uses: actions/github-script@v9.0.0
         id: matrix
         with:
           script: |
@@ -152,14 +152,14 @@ jobs:
       rust: ${{ steps.filter.outputs.rust }}
     steps:
       - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           # dorny/paths-filter fetches `PR_BASE_SHA` with the persisted credentials
           persist-credentials: true
           show-progress: false
 
       - name: Check if we actually made changes
-        uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
+        uses: dorny/paths-filter@v4.0.3
         id: filter
         with:
           # the API lists a stacked PR's changes against the PR below it, so the diff runs over git against `base`
@@ -179,7 +179,7 @@ jobs:
       - repo-has-container
       - repo-has-deb
     outputs:
-      version: ${{ steps.version.outputs.version }}
+      version: ${{ steps.version.outputs.next-version }}
       # the artifacts embed the predicted version, so a new version needs a rebuild
       build_container: ${{ fromJSON(needs.repo-has-container.outputs.has_container) && (fromJSON(needs.changes.outputs.docker) || fromJSON(needs.changes.outputs.rust) || fromJSON(steps.version_moved.outputs.container)) }}
       # the deb doesn't build from the Dockerfile
@@ -193,40 +193,23 @@ jobs:
       )
     steps:
       - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
           show-progress: false
           fetch-depth: 0
 
       - name: Install git-cliff to generate changelog & next version number
-        uses: taiki-e/install-action@f7e5d7c961414b23f5b25b2da9294395d08513ad # v2.87.26
+        uses: taiki-e/install-action@v2.88.0
         with:
           tool: git-cliff
 
       - name: Calculate next version
-        shell: bash
         id: version
-        run: |
-          latest_tag=$(git describe --tags --abbrev=0 || true)
-
-          # git-cliff also applies .cliffignore to --bumped-version, so the release branch's copy would hide commits from the version bump
-          rm --force .cliffignore
-
-          bumped=$(git-cliff --bumped-version --unreleased --offline)
-
-          # If git-cliff didn't bump (e.g. chore/ci only commits), force a patch increment
-          # so we never tag a Docker image with the same version as the last release.
-          if [ "${bumped}" = "${latest_tag}" ]; then
-            bumped=$(git-cliff --bumped-version --bump patch --unreleased --offline)
-            echo "Force bumping to ${bumped}"
-          fi
-
-          # tags are vX.Y.Z, cargo versions are not prefixed
-          echo "version=${bumped#v}" >> "${GITHUB_OUTPUT}"
+        uses: $/.github/actions/calculate-next-version
 
       - name: Set up ORAS
-        uses: oras-project/setup-oras@005458ad77f1c8facd38a094e4af2e69e5607ff4 # v2.0.2
+        uses: oras-project/setup-oras@v2.0.3
 
       - name: Log into registry ${{ env.REGISTRY }}
         shell: bash
@@ -250,7 +233,7 @@ jobs:
           BASE_SHA: ${{ env.PR_BASE_SHA }}
           HAS_CONTAINER: ${{ needs.repo-has-container.outputs.has_container }}
           HAS_DEB: ${{ needs.repo-has-deb.outputs.has_deb }}
-          VERSION: ${{ steps.version.outputs.version }}
+          VERSION: ${{ steps.version.outputs.next-version }}
         run: |
           image_name="${REGISTRY,,}/${IMAGE_NAME,,}"
 
@@ -307,13 +290,13 @@ jobs:
     steps:
       - &checkout
         name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
           show-progress: false
 
       - name: Install cargo-edit to do set-version
-        uses: taiki-e/install-action@f7e5d7c961414b23f5b25b2da9294395d08513ad # v2.87.26
+        uses: taiki-e/install-action@v2.88.0
         with:
           tool: cargo-edit
 
@@ -332,7 +315,7 @@ jobs:
           git diff > /tmp/version-bump.patch
 
       - name: Upload version bump patch
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        uses: actions/upload-artifact@v7.0.2
         with:
           if-no-files-found: error
           name: version-bump-patch
@@ -416,12 +399,11 @@ jobs:
       - *checkout
 
       - name: Download version bump patch
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        uses: actions/download-artifact@v8.0.2
         with:
           name: version-bump-patch
           path: .
 
-      # TODO validate no changes between github.event.pull_request.head.sha and the actual current sha (representing the hypothetical merge)
       - name: Set variables
         shell: bash
         id: variables
@@ -443,7 +425,7 @@ jobs:
           echo "buildcache_main_ref=${CACHE_IMAGE_NAME}:buildcache-main-${runner_arch}-${platform_no_slashes}" >> "${GITHUB_OUTPUT}"
 
       - name: Set up Docker
-        uses: docker/setup-docker-action@2bf61fb9464cc67f0cbdeabed6aa0380accd1c70 # v5.5.0
+        uses: docker/setup-docker-action@v5.6.0
         with:
           daemon-config: |
             {
@@ -453,10 +435,10 @@ jobs:
             }
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+        uses: docker/setup-buildx-action@v4.4.1
 
       - name: Log into registry ${{ needs.prepare-variables.outputs.registry }}
-        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        uses: docker/login-action@v4.7.0
         with:
           password: ${{ secrets.GITHUB_TOKEN }}
           registry: ${{ needs.prepare-variables.outputs.registry }}
@@ -475,14 +457,14 @@ jobs:
           fi
 
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+        uses: docker/setup-qemu-action@v4.4.0
         if: fromJSON(steps.setup_qemu.outputs.setup_qemu) == true
         with:
           platforms: linux/${{ matrix.platform }}
           cache-image: false
 
       - name: Extract Docker metadata
-        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        uses: docker/metadata-action@v6.2.0
         id: meta
         with:
           annotations: |
@@ -508,7 +490,7 @@ jobs:
             type=raw,value=${{ steps.variables.outputs.unique_tag_arch }}
 
       - name: Build Docker image
-        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        uses: docker/build-push-action@v7.4.0
         with:
           build-args: |
             APPLICATION_NAME=${{ needs.prepare-variables.outputs.application_name }}
@@ -529,7 +511,7 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
 
       - name: Upload artifact
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        uses: actions/upload-artifact@v7.0.2
         if: |
           matrix.runs-on == 'ubuntu-26.04'
         with:
@@ -543,7 +525,7 @@ jobs:
     runs-on: ubuntu-26.04
     services:
       registry:
-        image: registry:3@sha256:ddf754342cfc8acc51a56d5d0ab6af06826461864460636d8bd5c546dab2a7b8
+        image: registry:3@sha256:d4032d4cc323c1731c707931ecada07a53076eac38e3b61ae57533f170f2c6c3
         ports:
           - 5000:5000
     outputs:
@@ -570,7 +552,7 @@ jobs:
       github.event_name == 'pull_request'
     steps:
       - name: Set up Docker
-        uses: docker/setup-docker-action@2bf61fb9464cc67f0cbdeabed6aa0380accd1c70 # v5.5.0
+        uses: docker/setup-docker-action@v5.6.0
         with:
           daemon-config: |
             {
@@ -580,17 +562,17 @@ jobs:
             }
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+        uses: docker/setup-buildx-action@v4.4.1
 
       - name: Log into registry ${{ needs.prepare-variables.outputs.registry }}
-        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        uses: docker/login-action@v4.7.0
         with:
           registry: ${{ needs.prepare-variables.outputs.registry }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Extract Docker metadata
-        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        uses: docker/metadata-action@v6.2.0
         id: meta
         with:
           annotations: |
@@ -606,7 +588,7 @@ jobs:
             type=ref,event=pr,suffix=-latest
 
       - name: Download artifacts
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        uses: actions/download-artifact@v8.0.2
         id: artifact
         with:
           merge-multiple: true
@@ -740,7 +722,7 @@ jobs:
       github.event_name == 'pull_request'
     steps:
       - name: Set up Docker
-        uses: docker/setup-docker-action@2bf61fb9464cc67f0cbdeabed6aa0380accd1c70 # v5.5.0
+        uses: docker/setup-docker-action@v5.6.0
         with:
           daemon-config: |
             {
@@ -750,10 +732,10 @@ jobs:
             }
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+        uses: docker/setup-buildx-action@v4.4.1
 
       - name: Log into registry ${{ needs.prepare-variables.outputs.registry }}
-        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        uses: docker/login-action@v4.7.0
         with:
           registry: ${{ needs.prepare-variables.outputs.registry }}
           username: ${{ github.actor }}
@@ -764,7 +746,7 @@ jobs:
       # since we deal with tags (mutable), and the way to get a digest is to use the tag, I prefer
       # sourcing the digest from the local registry we just spun up (trusted)
       - name: Generate artifact attestation
-        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        uses: actions/attest@v4.2.2
         id: attestation
         with:
           subject-name: ${{ needs.prepare-variables.outputs.full_image_name_remote_registry }}
@@ -787,9 +769,15 @@ jobs:
 
           echo "::warning::No image found for base commit ${BASE_SHA}, skipping the Docker Scout comparison"
 
+      - name: Preload Docker Scout
+        if: steps.base_image.outputs.image != ''
+        uses: $/.github/actions/preload-docker-scout
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Docker Scout Compare (linux/amd64)
         if: steps.base_image.outputs.image != ''
-        uses: docker/scout-action@221e7f4860634eeb1579e3bd7ca232e577bd1864 # v1.26.0
+        uses: docker/scout-action@v1.28.0
         with:
           command: compare
           image: "${{ needs.prepare-variables.outputs.full_image_name_remote_registry }}:pr-${{ github.event.pull_request.number }}-latest"
@@ -801,7 +789,7 @@ jobs:
 
       - name: Docker Scout Compare (linux/arm64)
         if: steps.base_image.outputs.image != ''
-        uses: docker/scout-action@221e7f4860634eeb1579e3bd7ca232e577bd1864 # v1.26.0
+        uses: docker/scout-action@v1.28.0
         with:
           command: compare
           image: "${{ needs.prepare-variables.outputs.full_image_name_remote_registry }}:pr-${{ github.event.pull_request.number }}-latest"
@@ -823,7 +811,7 @@ jobs:
     runs-on: ${{ matrix.runs-on }}
     # the runner's glibc is newer than Debian stable's, so the build runs in the Dockerfile's image
     container:
-      image: rust:1.99.0-slim-trixie@sha256:24e632c09342c20abf8312cf4f61430a911c01ed3a5e4c02b87292b1c39c5273
+      image: rust:1.99.1-slim-trixie@sha256:b8e062b1c3a80183df83d9ba187cadd2b5ab84bc78d453dbfeb2fccd5f982247
     permissions:
       artifact-metadata: write # actions/attest
       attestations: write # actions/attest
@@ -850,7 +838,7 @@ jobs:
       - *checkout
 
       - name: Set up mold
-        uses: rui314/setup-mold@10ca16bf91dc22e05ebdc935cad9c75ea248f621 # v1 # zizmor: ignore[ref-version-mismatch,stale-action-refs] v1 is a floating tag
+        uses: rui314/setup-mold@v1
 
       - name: Set up toolchain
         shell: bash
@@ -861,15 +849,15 @@ jobs:
           cargo --version
 
       - name: Set up sccache
-        uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba # v0.0.11
+        uses: mozilla-actions/sccache-action@v0.0.11
 
       - name: Install cargo-deb
-        uses: taiki-e/install-action@f7e5d7c961414b23f5b25b2da9294395d08513ad # v2.87.26
+        uses: taiki-e/install-action@v2.88.0
         with:
           tool: cargo-deb
 
       - name: Download version bump patch
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        uses: actions/download-artifact@v8.0.2
         with:
           name: version-bump-patch
           path: ${{ runner.temp }}
@@ -919,12 +907,12 @@ jobs:
       - name: Attest Debian package
         # fork PRs run without id-token
         if: github.event.pull_request.head.repo.full_name == github.repository
-        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        uses: actions/attest@v4.2.2
         with:
           subject-path: target/debian/*.deb
 
       - name: Upload Debian package
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        uses: actions/upload-artifact@v7.0.2
         with:
           if-no-files-found: error
           name: deb-${{ matrix.arch }}
@@ -956,7 +944,7 @@ jobs:
       github.event_name == 'pull_request'
     steps:
       - name: Download Debian packages
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        uses: actions/download-artifact@v8.0.2
         id: artifact
         with:
           merge-multiple: true
@@ -964,7 +952,7 @@ jobs:
           pattern: deb-*
 
       - name: Set up ORAS
-        uses: oras-project/setup-oras@005458ad77f1c8facd38a094e4af2e69e5607ff4 # v2.0.2
+        uses: oras-project/setup-oras@v2.0.3
 
       - name: Log into registry ${{ needs.prepare-variables.outputs.registry }}
         shell: bash

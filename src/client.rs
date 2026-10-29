@@ -340,7 +340,7 @@ impl Client {
     pub async fn restart_container<'r, C: Into<ContainerRef<'r>>>(
         &self,
         container: C,
-        timeout: std::time::Duration,
+        timeout: Duration,
     ) -> Result<(), ApiEndpointCallError<<RestartContainer as ApiEndpoint>::Error>> {
         self.call::<RestartContainer>(&RestartContainerRequest {
             container: container.into(),
