@@ -1,5 +1,6 @@
 use std::fmt;
 use std::net::{Ipv4Addr, Ipv6Addr};
+use std::time::Duration;
 
 use hashbrown::HashMap;
 use serde::de::{SeqAccess, Visitor};
@@ -103,6 +104,17 @@ impl ContainerSummary {
     pub fn get_names(&self) -> &[Box<str>] {
         &self.names
     }
+}
+
+/// The `t` parameter of the stop and restart endpoints: how long the daemon waits for the container to exit after the stop signal.
+#[derive(Clone, Copy)]
+pub enum StopTimeout {
+    /// Omits `t`, so the daemon applies the container's `StopTimeout`. Without one, Docker Engine 29.7 and later apply `default-stop-timeout`, and earlier versions apply a built-in timeout.
+    Default,
+    /// Sends `t=-1`, so the daemon waits for the container to exit and never kills it.
+    Indefinite,
+    /// Sends `t` in whole seconds, rounded up.
+    After(Duration),
 }
 
 #[cfg(test)]

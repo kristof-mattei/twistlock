@@ -1,11 +1,9 @@
-use std::time::Duration;
-
 use hyper::Method;
 
 use crate::client::url_encode;
 use crate::endpoint::ApiEndpoint;
 use crate::filters::Filters;
-use crate::models::container::ContainerSummary;
+use crate::models::container::{ContainerSummary, StopTimeout};
 use crate::models::container_inspect::ContainerInspect;
 use crate::models::id::ContainerRef;
 
@@ -45,9 +43,25 @@ impl ApiEndpoint for InspectContainer {
     }
 }
 
+fn stop_timeout_path(container: &ContainerRef<'_>, action: &str, timeout: StopTimeout) -> String {
+    let container = container.as_str();
+
+    match timeout {
+        StopTimeout::Default => format!("/containers/{}/{}", container, action),
+        StopTimeout::Indefinite => format!("/containers/{}/{}?t=-1", container, action),
+        StopTimeout::After(duration) => {
+            let seconds = duration
+                .as_secs()
+                .saturating_add(u64::from(duration.subsec_nanos() != 0));
+
+            format!("/containers/{}/{}?t={}", container, action, seconds)
+        },
+    }
+}
+
 pub struct RestartContainerRequest<'r> {
     pub container: ContainerRef<'r>,
-    pub timeout: Duration,
+    pub timeout: StopTimeout,
 }
 
 pub struct RestartContainer;
@@ -60,10 +74,10 @@ impl ApiEndpoint for RestartContainer {
     const METHOD: Method = Method::POST;
 
     fn path_and_query(request: &Self::Request<'_>) -> Result<String, std::io::Error> {
-        Ok(format!(
-            "/containers/{}/restart?t={}",
-            request.container.as_str(),
-            request.timeout.as_secs()
+        Ok(stop_timeout_path(
+            &request.container,
+            "restart",
+            request.timeout,
         ))
     }
 
@@ -85,6 +99,7 @@ mod tests {
         InspectContainer, ListContainers, RestartContainer, RestartContainerRequest,
     };
     use crate::filters::{Filters, Health, Isolation, Status};
+    use crate::models::container::StopTimeout;
     use crate::models::id::{ContainerId, ContainerRef};
 
     #[test]
@@ -126,16 +141,51 @@ mod tests {
         );
     }
 
+    fn restart_path(timeout: StopTimeout) -> String {
+        RestartContainer::path_and_query(&RestartContainerRequest {
+            container: ContainerRef::IdOrName("ubuntu"),
+            timeout,
+        })
+        .unwrap()
+    }
+
     #[test]
     fn restart_container_path_includes_the_timeout() {
-        let request = RestartContainerRequest {
-            container: ContainerRef::IdOrName("ubuntu"),
-            timeout: Duration::from_secs(12),
-        };
-
         assert_eq!(
-            RestartContainer::path_and_query(&request).unwrap(),
+            restart_path(StopTimeout::After(Duration::from_secs(12))),
             "/containers/ubuntu/restart?t=12"
+        );
+    }
+
+    #[test]
+    fn restart_container_path_rounds_a_partial_second_up() {
+        assert_eq!(
+            restart_path(StopTimeout::After(Duration::from_millis(1500))),
+            "/containers/ubuntu/restart?t=2"
+        );
+    }
+
+    #[test]
+    fn restart_container_path_with_zero_timeout() {
+        assert_eq!(
+            restart_path(StopTimeout::After(Duration::ZERO)),
+            "/containers/ubuntu/restart?t=0"
+        );
+    }
+
+    #[test]
+    fn restart_container_path_with_default_timeout_omits_t() {
+        assert_eq!(
+            restart_path(StopTimeout::Default),
+            "/containers/ubuntu/restart"
+        );
+    }
+
+    #[test]
+    fn restart_container_path_with_indefinite_timeout() {
+        assert_eq!(
+            restart_path(StopTimeout::Indefinite),
+            "/containers/ubuntu/restart?t=-1"
         );
     }
 

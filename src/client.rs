@@ -1,5 +1,4 @@
 use std::path::PathBuf;
-use std::time::Duration;
 
 use http_body_util::{BodyExt as _, Collected, Full};
 use hyper::body::{Body, Bytes, Incoming};
@@ -27,7 +26,7 @@ use crate::endpoints::networks::{InspectNetwork, ListNetworks};
 use crate::filters::Filters;
 use crate::http_client;
 use crate::http_client::{build_request, execute_request};
-use crate::models::container::ContainerSummary;
+use crate::models::container::{ContainerSummary, StopTimeout};
 use crate::models::container_inspect::ContainerInspect;
 use crate::models::events::{Event, EventDecodeError};
 use crate::models::id::{ContainerRef, NetworkRef};
@@ -329,7 +328,7 @@ impl Client {
     pub async fn restart_container<'r, C: Into<ContainerRef<'r>>>(
         &self,
         container: C,
-        timeout: Duration,
+        timeout: StopTimeout,
     ) -> Result<(), ApiEndpointCallError<<RestartContainer as ApiEndpoint>::Error>> {
         self.call::<RestartContainer>(&RestartContainerRequest {
             container: container.into(),
