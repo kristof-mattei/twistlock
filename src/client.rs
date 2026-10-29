@@ -1,7 +1,7 @@
 use std::path::PathBuf;
+use std::time::Duration;
 
 use bytes::Bytes;
-use http::uri::Scheme;
 use http::{Method, StatusCode};
 use http_body::Body;
 use http_body_util::BodyExt as _;
@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tracing::{Level, event};
 
-use crate::config::Endpoint as ConfigEndpoint;
+use crate::config::{Endpoint, TcpAddress, Tls, Transport};
 use crate::endpoint::{ApiEndpoint, ApiEndpointCallError, TransportError};
 use crate::endpoints::containers::{
     InspectContainer, ListContainers, RestartContainer, RestartContainerRequest, StopContainer,
@@ -25,16 +25,11 @@ use crate::models::events::{Event, EventDecodeError};
 use crate::models::id::{ContainerRef, NetworkRef};
 use crate::models::network::{NetworkInspect, NetworkSummary};
 
-#[derive(Debug)]
-pub struct ClientCredentialPaths {
-    pub key: PathBuf,
-    pub cert: PathBuf,
-}
+// the Docker CLI sends this `Host` header over a socket
+const SOCKET_BASE_URL: &str = "http://api.moby.localhost";
 
 #[derive(Debug, Error)]
 pub enum BuildError {
-    #[error("Endpoint `{}` is not an absolute `http` or `https` URI", .0)]
-    InvalidEndpoint(http::Uri),
     #[error("Failed to read `{}`", .path.display())]
     Read {
         path: PathBuf,
@@ -74,6 +69,14 @@ struct ErrorResponse {
     message: String,
 }
 
+fn without_loopback_proxy(builder: ClientBuilder, address: &TcpAddress) -> ClientBuilder {
+    if address.host.is_loopback() {
+        builder.no_proxy()
+    } else {
+        builder
+    }
+}
+
 fn without_tls(builder: ClientBuilder) -> ClientBuilder {
     builder.tls_certs_only([])
 }
@@ -82,13 +85,9 @@ fn read(path: PathBuf) -> Result<Vec<u8>, BuildError> {
     std::fs::read(&path).map_err(|source| BuildError::Read { path, source })
 }
 
-fn with_tls(
-    builder: ClientBuilder,
-    cacert: Option<PathBuf>,
-    client_credentials: Option<ClientCredentialPaths>,
-) -> Result<ClientBuilder, BuildError> {
-    let builder = match cacert {
-        Some(path) => {
+fn with_tls(builder: ClientBuilder, tls: Tls) -> Result<ClientBuilder, BuildError> {
+    let builder = match (tls.verify, tls.ca_cert) {
+        (true, Some(path)) => {
             let certificates =
                 Certificate::from_pem_bundle(&read(path)?).map_err(BuildError::InvalidCa)?;
 
@@ -98,10 +97,11 @@ fn with_tls(
 
             builder.tls_certs_only(certificates)
         },
-        None => builder,
+        (true, None) => builder,
+        (false, _) => builder.tls_danger_accept_invalid_certs(true),
     };
 
-    match client_credentials {
+    match tls.client_credentials {
         Some(paths) => {
             // the certificate file can end without a newline
             let pem = [read(paths.cert)?, read(paths.key)?].join(&b'\n');
@@ -126,40 +126,43 @@ impl Client {
     /// # Errors
     ///
     /// See [`BuildError`].
-    pub fn build(
-        endpoint: ConfigEndpoint,
-        cacert: Option<PathBuf>,
-        client_credentials: Option<ClientCredentialPaths>,
-    ) -> Result<Client, BuildError> {
+    pub fn build(endpoint: Endpoint) -> Result<Client, BuildError> {
+        // the Docker CLI's transport settings
         let builder = ClientBuilder::new()
             .http1_only()
-            .no_proxy()
-            .redirect(Policy::none());
+            .redirect(Policy::none())
+            .connect_timeout(Duration::from_secs(10))
+            .tcp_keepalive(Duration::from_secs(15))
+            .tcp_keepalive_interval(Duration::from_secs(15))
+            .tcp_keepalive_retries(9)
+            .pool_idle_timeout(Duration::from_secs(30))
+            .pool_max_idle_per_host(2);
 
-        let (builder, base_url) = match endpoint {
-            ConfigEndpoint::Direct(uri) => {
-                let (Some(scheme), Some(authority)) = (uri.scheme(), uri.authority()) else {
-                    return Err(BuildError::InvalidEndpoint(uri));
-                };
+        #[cfg(any(target_os = "android", target_os = "fuchsia", target_os = "linux"))]
+        let builder = builder.tcp_user_timeout(None);
 
-                let builder = if *scheme == Scheme::HTTPS {
-                    with_tls(builder, cacert, client_credentials)?
-                } else if *scheme == Scheme::HTTP {
-                    without_tls(builder)
-                } else {
-                    return Err(BuildError::InvalidEndpoint(uri));
-                };
-
-                (builder, format!("{}://{}", scheme, authority))
-            },
-            #[cfg(not(windows))]
-            ConfigEndpoint::Socket(path) => {
-                // we're connecting over a socket, so the url is localhost
-                (
-                    without_tls(builder.unix_socket(path)),
-                    "http://localhost".to_owned(),
-                )
-            },
+        let (builder, base_url) = match endpoint.into_transport() {
+            #[cfg(unix)]
+            Transport::Unix(path) => (
+                without_tls(builder.unix_socket(path)),
+                SOCKET_BASE_URL.to_owned(),
+            ),
+            #[cfg(windows)]
+            Transport::NamedPipe(pipe) => (
+                without_tls(builder.windows_named_pipe(pipe)),
+                SOCKET_BASE_URL.to_owned(),
+            ),
+            Transport::Tcp { address, tls: None } => (
+                without_tls(without_loopback_proxy(builder, &address)),
+                format!("http://{}", address),
+            ),
+            Transport::Tcp {
+                address,
+                tls: Some(tls),
+            } => (
+                with_tls(without_loopback_proxy(builder, &address), tls)?,
+                format!("https://{}", address),
+            ),
         };
 
         Ok(Client {
@@ -455,7 +458,6 @@ mod tests {
     use std::task::{Context, Poll};
 
     use bytes::Bytes;
-    use http::Uri;
     use http_body::{Body, Frame};
     use http_body_util::Empty;
     use pretty_assertions::assert_eq;
@@ -468,10 +470,8 @@ mod tests {
     };
     use tempfile::TempDir;
 
-    use crate::client::{
-        BuildError, Client, ClientCredentialPaths, EventLines, EventStreamError, with_tls,
-    };
-    use crate::config::Endpoint;
+    use crate::client::{BuildError, Client, EventLines, EventStreamError, with_tls};
+    use crate::config::{ClientCredentialPaths, Endpoint, Tls};
     use crate::endpoint::{ApiEndpointCallError, TransportError};
     use crate::models::container::{StopOutcome, StopTimeout};
     use crate::models::events::{Event, EventDecodeError};
@@ -657,7 +657,7 @@ mod tests {
         let body = spawn_daemon(move || listener.accept().unwrap().0, head);
 
         let endpoint = Endpoint::from_str(&format!("tcp://{}", address)).unwrap();
-        let client = Client::build(endpoint, None, None).unwrap();
+        let client = Client::build(endpoint).unwrap();
 
         (client, body)
     }
@@ -683,10 +683,11 @@ mod tests {
             .unwrap()
     }
 
+    /// Returns the daemon's `DOCKER_HOST`.
     fn serve_tls(
         config: ServerConfig,
         head: &'static str,
-    ) -> (Uri, std::sync::mpsc::Sender<String>) {
+    ) -> (String, std::sync::mpsc::Sender<String>) {
         let config = Arc::new(config);
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let address = listener.local_addr().unwrap();
@@ -700,37 +701,11 @@ mod tests {
             head,
         );
 
-        (format!("https://{}", address).parse().unwrap(), body)
+        (format!("tcp://{}", address), body)
     }
 
-    fn tls_client(
-        uri: Uri,
-        cacert: Option<PathBuf>,
-        client_credentials: Option<ClientCredentialPaths>,
-    ) -> Client {
-        Client::build(Endpoint::Direct(uri), cacert, client_credentials).unwrap()
-    }
-
-    #[test]
-    fn build_without_a_scheme_is_an_invalid_endpoint() {
-        let endpoint = Endpoint::Direct(Uri::from_static("localhost:2375"));
-
-        let error = Client::build(endpoint, None, None).unwrap_err();
-
-        assert!(matches!(error, BuildError::InvalidEndpoint(_)));
-        assert_eq!(
-            error.to_string(),
-            "Endpoint `localhost:2375` is not an absolute `http` or `https` URI"
-        );
-    }
-
-    #[test]
-    fn build_with_a_tcp_scheme_is_an_invalid_endpoint() {
-        let endpoint = Endpoint::Direct(Uri::from_static("tcp://localhost:2375"));
-
-        let error = Client::build(endpoint, None, None).unwrap_err();
-
-        assert!(matches!(error, BuildError::InvalidEndpoint(_)));
+    fn tls_client(host: &str, tls: Tls) -> Client {
+        Client::build(Endpoint::from_str(host).unwrap().with_tls(tls)).unwrap()
     }
 
     #[tokio::test]
@@ -798,7 +773,8 @@ mod tests {
             "HTTP/1.1 204 No Content\r\n\r\n",
         );
 
-        let client = Client::build(Endpoint::Socket(path), None, None).unwrap();
+        let endpoint = Endpoint::from_str(&format!("unix://{}", path.display())).unwrap();
+        let client = Client::build(endpoint).unwrap();
 
         let outcome = client
             .stop_container(ContainerRef::IdOrName("ubuntu"), StopTimeout::Default)
@@ -894,17 +870,52 @@ mod tests {
             .with_single_cert(vec![daemon_cert.der().clone()], daemon_key.into())
             .unwrap();
 
-        let (uri, _body) = serve_tls(config, "HTTP/1.1 204 No Content\r\n\r\n");
+        let (host, _body) = serve_tls(config, "HTTP/1.1 204 No Content\r\n\r\n");
 
         let directory = TempDir::new().unwrap();
 
         let client = tls_client(
-            uri,
-            Some(write(directory.path(), "ca.pem", &ca.pem())),
-            Some(ClientCredentialPaths {
-                cert: write(directory.path(), "cert.pem", &client_cert.pem()),
-                key: write(directory.path(), "key.pem", &client_key.serialize_pem()),
-            }),
+            &host,
+            Tls {
+                verify: true,
+                ca_cert: Some(write(directory.path(), "ca.pem", &ca.pem())),
+                client_credentials: Some(ClientCredentialPaths {
+                    cert: write(directory.path(), "cert.pem", &client_cert.pem()),
+                    key: write(directory.path(), "key.pem", &client_key.serialize_pem()),
+                }),
+            },
+        );
+
+        let outcome = client
+            .stop_container(ContainerRef::IdOrName("ubuntu"), StopTimeout::Default)
+            .await
+            .unwrap();
+
+        assert!(matches!(outcome, StopOutcome::Stopped));
+    }
+
+    #[tokio::test]
+    async fn stop_over_unverified_tls_is_stopped() {
+        let daemon_key = KeyPair::generate().unwrap();
+        let daemon_cert = CertificateParams::new(["127.0.0.1".to_owned()])
+            .unwrap()
+            .self_signed(&daemon_key)
+            .unwrap();
+
+        let config = daemon_config()
+            .with_no_client_auth()
+            .with_single_cert(vec![daemon_cert.der().clone()], daemon_key.into())
+            .unwrap();
+
+        let (host, _body) = serve_tls(config, "HTTP/1.1 204 No Content\r\n\r\n");
+
+        let client = tls_client(
+            &host,
+            Tls {
+                verify: false,
+                ca_cert: None,
+                client_credentials: None,
+            },
         );
 
         let outcome = client
@@ -945,13 +956,16 @@ mod tests {
         let directory = TempDir::new().unwrap();
 
         let client = tls_client(
-            format!("https://{}", address).parse().unwrap(),
-            Some(write(
-                directory.path(),
-                "ca.pem",
-                &certificate_authority().pem(),
-            )),
-            None,
+            &format!("tcp://{}", address),
+            Tls {
+                verify: true,
+                ca_cert: Some(write(
+                    directory.path(),
+                    "ca.pem",
+                    &certificate_authority().pem(),
+                )),
+                client_credentials: None,
+            },
         );
 
         let result = client
@@ -970,12 +984,15 @@ mod tests {
 
         let result = with_tls(
             ClientBuilder::new(),
-            Some(write(
-                directory.path(),
-                "ca.pem",
-                "-----BEGIN CERTIFICATE-----\n!\n-----END CERTIFICATE-----\n",
-            )),
-            None,
+            Tls {
+                verify: true,
+                ca_cert: Some(write(
+                    directory.path(),
+                    "ca.pem",
+                    "-----BEGIN CERTIFICATE-----\n!\n-----END CERTIFICATE-----\n",
+                )),
+                client_credentials: None,
+            },
         );
 
         assert!(matches!(result, Err(BuildError::InvalidCa(_))));
@@ -987,12 +1004,15 @@ mod tests {
 
         let result = with_tls(
             ClientBuilder::new(),
-            Some(write(
-                directory.path(),
-                "ca.pem",
-                &KeyPair::generate().unwrap().serialize_pem(),
-            )),
-            None,
+            Tls {
+                verify: true,
+                ca_cert: Some(write(
+                    directory.path(),
+                    "ca.pem",
+                    &KeyPair::generate().unwrap().serialize_pem(),
+                )),
+                client_credentials: None,
+            },
         );
 
         assert!(matches!(result, Err(BuildError::EmptyCa)));
@@ -1003,13 +1023,32 @@ mod tests {
         let directory = TempDir::new().unwrap();
         let ca_cert = directory.path().join("ca.pem");
 
-        let Err(BuildError::Read { path, .. }) =
-            with_tls(ClientBuilder::new(), Some(ca_cert.clone()), None)
-        else {
+        let Err(BuildError::Read { path, .. }) = with_tls(
+            ClientBuilder::new(),
+            Tls {
+                verify: true,
+                ca_cert: Some(ca_cert.clone()),
+                client_credentials: None,
+            },
+        ) else {
             panic!("not a read error");
         };
 
         assert_eq!(path, ca_cert);
+    }
+
+    #[test]
+    fn missing_ca_file_without_verification_is_not_read() {
+        let directory = TempDir::new().unwrap();
+
+        tls_client(
+            "tcp://localhost:2376",
+            Tls {
+                verify: false,
+                ca_cert: Some(directory.path().join("ca.pem")),
+                client_credentials: None,
+            },
+        );
     }
 
     #[test]
@@ -1021,11 +1060,14 @@ mod tests {
 
         let result = with_tls(
             ClientBuilder::new(),
-            None,
-            Some(ClientCredentialPaths {
-                cert: write(directory.path(), "cert.pem", &cert.pem()),
-                key: write(directory.path(), "key.pem", "not a key"),
-            }),
+            Tls {
+                verify: true,
+                ca_cert: None,
+                client_credentials: Some(ClientCredentialPaths {
+                    cert: write(directory.path(), "cert.pem", &cert.pem()),
+                    key: write(directory.path(), "key.pem", "not a key"),
+                }),
+            },
         );
 
         assert!(matches!(result, Err(BuildError::InvalidIdentity(_))));

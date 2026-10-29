@@ -20,6 +20,7 @@ grcov
 headgreen
 hyperv
 idents
+keepalive
 kristof
 lintian
 mattei
@@ -29,6 +30,7 @@ msvc
 multiplatform
 netns
 nextest
+npipe
 oras
 pathbuf
 pkgs
@@ -55,6 +57,10 @@ taiki
 targetplatformdash
 telem
 tera
+tlscacert
+tlscert
+tlskey
+tlsverify
 topo
 tostring
 trixie
