@@ -4,28 +4,48 @@ use std::path::PathBuf;
 
 use url::Url;
 
-use crate::config::{ParseError, TcpAddress, TcpHost, Transport};
+use crate::config::{Host, ParseError, TcpAddress, TcpHost, Transport};
 
 const DEFAULT_TCP_HOST: &str = "localhost";
 const DEFAULT_TCP_PORT: u16 = 2375;
+const DEFAULT_TLS_TCP_PORT: u16 = 2376;
 #[cfg(unix)]
 const DEFAULT_UNIX_SOCKET: &str = "/var/run/docker.sock";
 #[cfg(windows)]
 const DEFAULT_NAMED_PIPE: &str = "//./pipe/docker_engine";
 
-pub(super) fn parse_host(value: &str) -> Result<Transport, ParseError> {
+#[cfg(unix)]
+pub(super) fn default_socket() -> Transport {
+    Transport::Unix(PathBuf::from(DEFAULT_UNIX_SOCKET))
+}
+
+#[cfg(windows)]
+pub(super) fn default_socket() -> Transport {
+    Transport::NamedPipe(DEFAULT_NAMED_PIPE.to_owned())
+}
+
+pub(super) fn default_tls_address() -> TcpAddress {
+    localhost(DEFAULT_TLS_TCP_PORT)
+}
+
+fn localhost(port: u16) -> TcpAddress {
+    TcpAddress {
+        host: TcpHost::Name(DEFAULT_TCP_HOST.to_owned()),
+        port,
+        base_path: String::new(),
+    }
+}
+
+pub(super) fn parse_host(value: &str) -> Result<Host, ParseError> {
     let value = value.trim();
 
     if value.is_empty() {
-        #[cfg(unix)]
-        return Ok(Transport::Unix(PathBuf::from(DEFAULT_UNIX_SOCKET)));
-        #[cfg(windows)]
-        return Ok(Transport::NamedPipe(DEFAULT_NAMED_PIPE.to_owned()));
+        return Ok(Host::Default);
     }
 
     let (proto, addr) = value.split_once("://").unwrap_or(("tcp", value));
 
-    match proto {
+    let transport = match proto {
         "tcp" => parse_tcp_addr(value, addr).map(|address| Transport::Tcp { address, tls: None }),
         #[cfg(unix)]
         "unix" => parse_socket_addr("unix", addr, DEFAULT_UNIX_SOCKET)
@@ -38,7 +58,9 @@ pub(super) fn parse_host(value: &str) -> Result<Transport, ParseError> {
         "npipe" => Err(ParseError::UnsupportedHost(value.to_owned())),
         "fd" | "ssh" => Err(ParseError::UnsupportedHost(value.to_owned())),
         _ => Err(ParseError::InvalidBindAddress(value.to_owned())),
-    }
+    }?;
+
+    Ok(Host::Explicit(transport))
 }
 
 fn parse_socket_addr(
@@ -65,11 +87,7 @@ fn parse_socket_addr(
 
 fn parse_tcp_addr(value: &str, addr: &str) -> Result<TcpAddress, ParseError> {
     if addr.is_empty() {
-        return Ok(TcpAddress {
-            host: TcpHost::Name(DEFAULT_TCP_HOST.to_owned()),
-            port: DEFAULT_TCP_PORT,
-            base_path: String::new(),
-        });
+        return Ok(localhost(DEFAULT_TCP_PORT));
     }
 
     if addr.contains("://") {
@@ -112,11 +130,11 @@ mod tests {
     use pretty_assertions::assert_eq;
 
     use crate::config::host::parse_host;
-    use crate::config::{Endpoint, ParseError, Transport};
+    use crate::config::{Endpoint, Host, ParseError, Transport};
 
     fn render(value: &str) -> String {
         Endpoint {
-            transport: parse_host(value).unwrap(),
+            host: parse_host(value).unwrap(),
         }
         .to_string()
     }
@@ -219,7 +237,7 @@ mod tests {
             ("tcp://192.168.0.1:2375", false),
             ("tcp://[::2]:2375", false),
         ] {
-            let Ok(Transport::Tcp { address, .. }) = parse_host(value) else {
+            let Ok(Host::Explicit(Transport::Tcp { address, .. })) = parse_host(value) else {
                 panic!("not a TCP host: `{}`", value);
             };
 
