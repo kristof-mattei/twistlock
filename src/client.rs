@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use http_body_util::{BodyExt as _, Collected, Full};
 use hyper::body::{Body, Bytes, Incoming};
-use hyper::{Method, Response};
+use hyper::{Method, Response, StatusCode};
 use hyper_rustls::{FixedServerNameResolver, HttpsConnector, HttpsConnectorBuilder};
 #[cfg(not(target_os = "windows"))]
 use hyper_unix_socket::UnixSocketConnector;
@@ -186,6 +186,7 @@ impl Client {
         &self,
         path_and_query: &str,
         method: Method,
+        accepts: fn(StatusCode) -> bool,
     ) -> Result<Response<Incoming>, ApiEndpointCallError<TError>>
     where
         TError: DeserializeOwned + std::fmt::Debug,
@@ -203,7 +204,7 @@ impl Client {
 
         let status_code = response.status();
 
-        if status_code.is_success() {
+        if accepts(status_code) {
             return Ok(response);
         }
 
@@ -235,7 +236,7 @@ impl Client {
     ///
     /// * Failure to build the path and query
     /// * Failure to send the request
-    /// * Response is not success
+    /// * `E::accepts` rejects the response status
     /// * Failed to deserialize the response
     pub(crate) async fn call<E: ApiEndpoint>(
         &self,
@@ -244,12 +245,14 @@ impl Client {
         let path_and_query = E::path_and_query(request).map_err(ApiEndpointCallError::Query)?;
 
         let response = self
-            .send_request::<E::Error>(&path_and_query, E::METHOD)
+            .send_request::<E::Error>(&path_and_query, E::METHOD, E::accepts)
             .await?;
+
+        let status = response.status();
 
         let bytes = read_body(response).await?;
 
-        E::parse_response(&bytes).map_err(|error| {
+        E::parse_response(status, &bytes).map_err(|error| {
             event!(Level::ERROR, ?error, message = %String::from_utf8_lossy(&bytes), "Failed to deserialize response");
             ApiEndpointCallError::Deserialize(error)
         })
@@ -343,7 +346,9 @@ impl Client {
     pub async fn subscribe_events(
         &self,
     ) -> Result<EventSubscription, ApiEndpointCallError<serde_json::Value>> {
-        let response = self.send_request("/events", Method::GET).await?;
+        let response = self
+            .send_request("/events", Method::GET, |status| status.is_success())
+            .await?;
 
         Ok(EventSubscription {
             lines: EventLines::new(response.into_body()),
@@ -454,7 +459,9 @@ mod tests {
     use crate::client::{Client, EventLines, EventStreamError};
     use crate::config::Endpoint;
     use crate::endpoint::ApiEndpointCallError;
+    use crate::models::container::StopTimeout;
     use crate::models::events::{Event, EventDecodeError};
+    use crate::models::id::ContainerRef;
 
     struct FailingBody(Option<std::io::Error>);
 
@@ -671,6 +678,20 @@ mod tests {
 
         assert!(matches!(error, EventStreamError::Frame(_)));
         assert_eq!(error.to_string(), "Failed to read frame");
+    }
+
+    #[tokio::test]
+    async fn restart_with_not_modified_is_an_error() {
+        let (client, _body) = serve("HTTP/1.1 304 Not Modified\r\n\r\n");
+
+        let Err(ApiEndpointCallError::HttpError { status, .. }) = client
+            .restart_container(ContainerRef::IdOrName("ubuntu"), StopTimeout::Default)
+            .await
+        else {
+            panic!("not an HTTP error");
+        };
+
+        assert_eq!(status, 304);
     }
 
     #[tokio::test]
