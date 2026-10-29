@@ -8,6 +8,7 @@ use std::str::FromStr;
 use thiserror::Error;
 
 /// A Docker endpoint, parsed from a `DOCKER_HOST` value.
+#[derive(Clone)]
 pub struct Endpoint {
     host: Host,
 }
@@ -63,12 +64,14 @@ impl Display for Endpoint {
     }
 }
 
+#[derive(Clone)]
 enum Host {
     /// An empty `DOCKER_HOST`.
     Default,
     Explicit(Transport),
 }
 
+#[derive(Clone)]
 pub(crate) enum Transport {
     #[cfg(unix)]
     Unix(PathBuf),
@@ -92,6 +95,7 @@ impl Display for Transport {
     }
 }
 
+#[derive(Clone)]
 pub(crate) struct TcpAddress {
     pub host: TcpHost,
     pub port: u16,
@@ -107,6 +111,7 @@ impl Display for TcpAddress {
     }
 }
 
+#[derive(Clone)]
 pub(crate) enum TcpHost {
     Ip(IpAddr),
     Name(String),
@@ -122,6 +127,7 @@ impl TcpHost {
 }
 
 /// The Docker CLI's `--tlsverify`, `--tlscacert`, `--tlscert` and `--tlskey`.
+#[derive(Clone)]
 pub struct Tls {
     /// `--tlsverify`. Without it, any daemon certificate is accepted.
     pub verify: bool,
@@ -131,6 +137,7 @@ pub struct Tls {
     pub client_credentials: Option<ClientCredentialPaths>,
 }
 
+#[derive(Clone)]
 pub struct ClientCredentialPaths {
     pub cert: PathBuf,
     pub key: PathBuf,
