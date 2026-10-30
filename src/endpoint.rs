@@ -1,4 +1,5 @@
 use http::{Method, StatusCode};
+use serde::de::DeserializeOwned;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -30,6 +31,26 @@ pub(crate) fn is_success(status: StatusCode) -> bool {
     status.is_success()
 }
 
+/// Failure of [`ApiEndpoint::parse_response`].
+pub(crate) enum ParseError {
+    /// The endpoint does not handle the status.
+    Status,
+    /// The body does not deserialize.
+    Body(serde_json::Error),
+}
+
+/// Parses a `2xx` response with a JSON body.
+pub(crate) fn parse_json<T: DeserializeOwned>(
+    status: StatusCode,
+    bytes: &[u8],
+) -> Result<T, ParseError> {
+    if is_success(status) {
+        serde_json::from_slice(bytes).map_err(ParseError::Body)
+    } else {
+        Err(ParseError::Status)
+    }
+}
+
 /// A typed Docker API endpoint.
 pub(crate) trait ApiEndpoint {
     /// Request.
@@ -47,19 +68,11 @@ pub(crate) trait ApiEndpoint {
     /// Returns an error if request parameters cannot be serialized.
     fn path_and_query(request: &Self::Request<'_>) -> Result<String, std::io::Error>;
 
-    /// Whether a response with `status` goes to [`ApiEndpoint::parse_response`] instead of becoming an error.
-    #[must_use]
-    fn accepts(status: StatusCode) -> bool {
-        is_success(status)
-    }
-
-    /// Parse an accepted response into the response type.
+    /// Parse a response into the response type.
     ///
     /// # Errors
     ///
-    /// Returns an error if the response body cannot be parsed.
-    fn parse_response(
-        status: StatusCode,
-        bytes: &[u8],
-    ) -> Result<Self::Response, serde_json::Error>;
+    /// * [`ParseError::Status`] if the endpoint does not handle `status`
+    /// * [`ParseError::Body`] if the body does not deserialize
+    fn parse_response(status: StatusCode, bytes: &[u8]) -> Result<Self::Response, ParseError>;
 }

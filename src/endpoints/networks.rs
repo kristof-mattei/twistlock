@@ -1,6 +1,6 @@
 use http::{Method, StatusCode};
 
-use crate::endpoint::ApiEndpoint;
+use crate::endpoint::{ApiEndpoint, ParseError, parse_json};
 use crate::models::id::NetworkRef;
 use crate::models::network::{NetworkInspect, NetworkSummary};
 
@@ -16,11 +16,8 @@ impl ApiEndpoint for ListNetworks {
         Ok("/networks".to_owned())
     }
 
-    fn parse_response(
-        _status: StatusCode,
-        bytes: &[u8],
-    ) -> Result<Self::Response, serde_json::Error> {
-        serde_json::from_slice(bytes)
+    fn parse_response(status: StatusCode, bytes: &[u8]) -> Result<Self::Response, ParseError> {
+        parse_json(status, bytes)
     }
 }
 
@@ -36,11 +33,8 @@ impl ApiEndpoint for InspectNetwork {
         Ok(format!("/networks/{}", request.path_segment()))
     }
 
-    fn parse_response(
-        _status: StatusCode,
-        bytes: &[u8],
-    ) -> Result<Self::Response, serde_json::Error> {
-        serde_json::from_slice(bytes)
+    fn parse_response(status: StatusCode, bytes: &[u8]) -> Result<Self::Response, ParseError> {
+        parse_json(status, bytes)
     }
 }
 
