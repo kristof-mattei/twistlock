@@ -55,10 +55,17 @@ impl ApiEndpoint for InspectContainer {
     }
 }
 
-fn stop_timeout_path(container: &ContainerRef<'_>, action: &str, timeout: StopTimeout) -> String {
-    let container = container.as_str();
+pub(crate) struct StopRequest<'r> {
+    pub container: ContainerRef<'r>,
+    pub timeout: StopTimeout,
+}
 
-    match timeout {
+pub(crate) type RestartRequest<'r> = StopRequest<'r>;
+
+fn stop_timeout_path(request: &StopRequest<'_>, action: &str) -> String {
+    let container = request.container.as_str();
+
+    match request.timeout {
         StopTimeout::Default => format!("/containers/{}/{}", container, action),
         StopTimeout::Indefinite => format!("/containers/{}/{}?t=-1", container, action),
         StopTimeout::After(duration) => {
@@ -71,25 +78,16 @@ fn stop_timeout_path(container: &ContainerRef<'_>, action: &str, timeout: StopTi
     }
 }
 
-pub(crate) struct RestartContainerRequest<'r> {
-    pub container: ContainerRef<'r>,
-    pub timeout: StopTimeout,
-}
-
 pub(crate) struct RestartContainer;
 
 impl ApiEndpoint for RestartContainer {
-    type Request<'r> = RestartContainerRequest<'r>;
+    type Request<'r> = RestartRequest<'r>;
     type Response = ();
 
     const METHOD: Method = Method::POST;
 
     fn path_and_query(request: &Self::Request<'_>) -> Result<String, std::io::Error> {
-        Ok(stop_timeout_path(
-            &request.container,
-            "restart",
-            request.timeout,
-        ))
+        Ok(stop_timeout_path(request, "restart"))
     }
 
     fn parse_response(
@@ -100,25 +98,16 @@ impl ApiEndpoint for RestartContainer {
     }
 }
 
-pub(crate) struct StopContainerRequest<'r> {
-    pub container: ContainerRef<'r>,
-    pub timeout: StopTimeout,
-}
-
 pub(crate) struct StopContainer;
 
 impl ApiEndpoint for StopContainer {
-    type Request<'r> = StopContainerRequest<'r>;
+    type Request<'r> = StopRequest<'r>;
     type Response = StopOutcome;
 
     const METHOD: Method = Method::POST;
 
     fn path_and_query(request: &Self::Request<'_>) -> Result<String, std::io::Error> {
-        Ok(stop_timeout_path(
-            &request.container,
-            "stop",
-            request.timeout,
-        ))
+        Ok(stop_timeout_path(request, "stop"))
     }
 
     fn accepts(status: StatusCode) -> bool {
@@ -148,8 +137,8 @@ mod tests {
     use crate::client::url_encode;
     use crate::endpoint::ApiEndpoint as _;
     use crate::endpoints::containers::{
-        InspectContainer, ListContainers, RestartContainer, RestartContainerRequest, StopContainer,
-        StopContainerRequest,
+        InspectContainer, ListContainers, RestartContainer, RestartRequest, StopContainer,
+        StopRequest,
     };
     use crate::filters::{Filters, Health, Isolation, Status};
     use crate::models::container::{StopOutcome, StopTimeout};
@@ -195,7 +184,7 @@ mod tests {
     }
 
     fn restart_path(timeout: StopTimeout) -> String {
-        RestartContainer::path_and_query(&RestartContainerRequest {
+        RestartContainer::path_and_query(&RestartRequest {
             container: ContainerRef::try_from("ubuntu").unwrap(),
             timeout,
         })
@@ -203,7 +192,7 @@ mod tests {
     }
 
     fn stop_path(timeout: StopTimeout) -> String {
-        StopContainer::path_and_query(&StopContainerRequest {
+        StopContainer::path_and_query(&StopRequest {
             container: ContainerRef::try_from("ubuntu").unwrap(),
             timeout,
         })
