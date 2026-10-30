@@ -106,12 +106,12 @@ impl ContainerSummary {
     }
 }
 
-/// The `t` parameter of the stop and restart endpoints: how long the daemon waits for the container to exit after the stop signal.
+/// The `t` parameter of the stop and restart endpoints: the grace period between the stop signal and the kill.
 #[derive(Clone, Copy)]
 pub enum StopTimeout {
     /// Omits `t`, so the daemon applies the container's `StopTimeout`. Without one, Docker Engine 29.7 and later apply `default-stop-timeout`, and earlier versions apply a built-in timeout.
     Default,
-    /// Sends `t=-1`, so the daemon waits for the container to exit and never kills it.
+    /// Sends `t=-1`, so the daemon never kills the container.
     Indefinite,
     /// Sends `t` in whole seconds, rounded up.
     After(Duration),
