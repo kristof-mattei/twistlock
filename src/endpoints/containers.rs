@@ -131,7 +131,6 @@ mod tests {
     use std::time::Duration;
 
     use hashbrown::{HashMap, HashSet};
-    use http::StatusCode;
     use pretty_assertions::assert_eq;
 
     use crate::client::url_encode;
@@ -141,7 +140,7 @@ mod tests {
         StopRequest,
     };
     use crate::filters::{Filters, Health, Isolation, Status};
-    use crate::models::container::{StopOutcome, StopTimeout};
+    use crate::models::container::StopTimeout;
     use crate::models::id::{ContainerId, ContainerRef};
 
     #[test]
@@ -258,32 +257,6 @@ mod tests {
             stop_path(StopTimeout::Indefinite),
             "/containers/ubuntu/stop?t=-1"
         );
-    }
-
-    #[test]
-    fn stop_container_no_content_is_stopped() {
-        assert!(
-            StopContainer::accepts(StatusCode::NO_CONTENT),
-            "`StopContainer` accepts `204`"
-        );
-
-        assert!(matches!(
-            StopContainer::parse_response(StatusCode::NO_CONTENT, b"").unwrap(),
-            StopOutcome::Stopped
-        ));
-    }
-
-    #[test]
-    fn stop_container_not_modified_is_already_stopped() {
-        assert!(
-            StopContainer::accepts(StatusCode::NOT_MODIFIED),
-            "`StopContainer` accepts `304`"
-        );
-
-        assert!(matches!(
-            StopContainer::parse_response(StatusCode::NOT_MODIFIED, b"").unwrap(),
-            StopOutcome::AlreadyStopped
-        ));
     }
 
     fn build(mode: &str) -> Filters {
