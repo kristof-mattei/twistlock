@@ -329,7 +329,7 @@ impl Client {
     /// This function will return an error if:
     ///
     /// * Failure to send the request
-    /// * The daemon answers with a status other than `2xx` or `304`
+    /// * The response has a status other than `2xx` or `304`
     pub async fn stop_container<'r, C: Into<ContainerRef<'r>>>(
         &self,
         container: C,
@@ -342,7 +342,7 @@ impl Client {
         .await
     }
 
-    /// Waits for the daemon's response head.
+    /// Resolves after the response head arrives.
     ///
     /// # Errors
     ///
@@ -746,7 +746,7 @@ mod tests {
 
         let mut subscription = client.subscribe_events().await.unwrap();
 
-        // the chunk announces 5 bytes, and the connection closes after 2
+        // the chunk size is 5, and the connection closes after 2 bytes
         body.send("5\r\nab".to_owned()).unwrap();
         drop(body);
 
