@@ -181,7 +181,7 @@ mod tests {
         let id = ContainerId::new("0f9fc026ac74");
 
         assert_eq!(
-            InspectContainer::path_and_query(&ContainerRef::Id(&id)).unwrap(),
+            InspectContainer::path_and_query(&ContainerRef::from(&id)).unwrap(),
             "/containers/0f9fc026ac74/json"
         );
     }
@@ -189,14 +189,14 @@ mod tests {
     #[test]
     fn inspect_container_path_from_name() {
         assert_eq!(
-            InspectContainer::path_and_query(&ContainerRef::IdOrName("ubuntu")).unwrap(),
+            InspectContainer::path_and_query(&ContainerRef::try_from("ubuntu").unwrap()).unwrap(),
             "/containers/ubuntu/json"
         );
     }
 
     fn restart_path(timeout: StopTimeout) -> String {
         RestartContainer::path_and_query(&RestartContainerRequest {
-            container: ContainerRef::IdOrName("ubuntu"),
+            container: ContainerRef::try_from("ubuntu").unwrap(),
             timeout,
         })
         .unwrap()
@@ -204,7 +204,7 @@ mod tests {
 
     fn stop_path(timeout: StopTimeout) -> String {
         StopContainer::path_and_query(&StopContainerRequest {
-            container: ContainerRef::IdOrName("ubuntu"),
+            container: ContainerRef::try_from("ubuntu").unwrap(),
             timeout,
         })
         .unwrap()
