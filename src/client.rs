@@ -759,6 +759,20 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn truncated_body_is_a_body_error() {
+        let (client, body) = serve("HTTP/1.1 200 OK\r\ncontent-length: 10\r\n\r\n");
+
+        // `content-length` is 10, and the connection closes after 2 bytes
+        body.send("[]".to_owned()).unwrap();
+        drop(body);
+
+        assert!(matches!(
+            client.list_networks().await,
+            Err(ApiEndpointCallError::Transport(TransportError::Body(_)))
+        ));
+    }
+
+    #[tokio::test]
     async fn stop_with_no_content_is_stopped() {
         let (client, _body) = serve("HTTP/1.1 204 No Content\r\n\r\n");
 
