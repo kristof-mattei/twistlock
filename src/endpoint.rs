@@ -26,6 +26,10 @@ pub enum ApiEndpointCallError {
     Deserialize(#[source] serde_json::Error),
 }
 
+pub(crate) fn is_success(status: StatusCode) -> bool {
+    status.is_success()
+}
+
 /// A typed Docker API endpoint.
 pub(crate) trait ApiEndpoint {
     /// Request.
@@ -46,7 +50,7 @@ pub(crate) trait ApiEndpoint {
     /// Whether a response with `status` goes to [`ApiEndpoint::parse_response`] instead of becoming an error.
     #[must_use]
     fn accepts(status: StatusCode) -> bool {
-        status.is_success()
+        is_success(status)
     }
 
     /// Parse an accepted response into the response type.

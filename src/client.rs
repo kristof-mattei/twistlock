@@ -12,7 +12,7 @@ use thiserror::Error;
 use tracing::{Level, event};
 
 use crate::config::{Endpoint, TcpAddress, Tls, Transport};
-use crate::endpoint::{ApiEndpoint, ApiEndpointCallError, TransportError};
+use crate::endpoint::{ApiEndpoint, ApiEndpointCallError, TransportError, is_success};
 use crate::endpoints::containers::{
     InspectContainer, ListContainers, RestartContainer, RestartContainerRequest, StopContainer,
     StopContainerRequest,
@@ -358,7 +358,7 @@ impl Client {
     /// * Response is not success
     pub async fn subscribe_events(&self) -> Result<EventSubscription, ApiEndpointCallError> {
         let response = self
-            .send_request("/events", Method::GET, |status| status.is_success())
+            .send_request("/events", Method::GET, is_success)
             .await?;
 
         Ok(EventSubscription {
