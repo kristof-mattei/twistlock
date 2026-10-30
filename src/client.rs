@@ -298,7 +298,13 @@ impl Client {
 
     /// Restart a container.
     ///
-    /// See [`Client::stop_container`] for when the future resolves.
+    /// The future resolves after the container has stopped and started again.
+    ///
+    /// Dropping the future before it resolves leaves the container in one of three states:
+    ///
+    /// * Unchanged
+    /// * Restarted
+    /// * Stopped, only on Docker Engine older than 24.0.7
     ///
     /// # Errors
     ///
