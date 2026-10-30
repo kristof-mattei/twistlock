@@ -33,7 +33,7 @@ impl ApiEndpoint for InspectNetwork {
     const METHOD: Method = Method::GET;
 
     fn path_and_query(request: &Self::Request<'_>) -> Result<String, std::io::Error> {
-        Ok(format!("/networks/{}", request.as_str()))
+        Ok(format!("/networks/{}", request.path_segment()))
     }
 
     fn parse_response(
@@ -57,7 +57,7 @@ mod tests {
         let id = NetworkId::new("88cad55e9ed7");
 
         assert_eq!(
-            InspectNetwork::path_and_query(&NetworkRef::Id(&id)).unwrap(),
+            InspectNetwork::path_and_query(&NetworkRef::from(&id)).unwrap(),
             "/networks/88cad55e9ed7"
         );
     }

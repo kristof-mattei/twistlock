@@ -765,7 +765,10 @@ mod tests {
         let (client, _body) = serve("HTTP/1.1 204 No Content\r\n\r\n");
 
         let outcome = client
-            .stop_container(ContainerRef::IdOrName("ubuntu"), StopTimeout::Default)
+            .stop_container(
+                ContainerRef::try_from("ubuntu").unwrap(),
+                StopTimeout::Default,
+            )
             .await
             .unwrap();
 
@@ -787,7 +790,10 @@ mod tests {
         let client = Client::build(endpoint).unwrap();
 
         let outcome = client
-            .stop_container(ContainerRef::IdOrName("ubuntu"), StopTimeout::Default)
+            .stop_container(
+                ContainerRef::try_from("ubuntu").unwrap(),
+                StopTimeout::Default,
+            )
             .await
             .unwrap();
 
@@ -799,7 +805,10 @@ mod tests {
         let (client, _body) = serve("HTTP/1.1 304 Not Modified\r\n\r\n");
 
         let outcome = client
-            .stop_container(ContainerRef::IdOrName("ubuntu"), StopTimeout::Default)
+            .stop_container(
+                ContainerRef::try_from("ubuntu").unwrap(),
+                StopTimeout::Default,
+            )
             .await
             .unwrap();
 
@@ -811,7 +820,10 @@ mod tests {
         let (client, _body) = serve("HTTP/1.1 304 Not Modified\r\n\r\n");
 
         let Err(ApiEndpointCallError::HttpError { status, .. }) = client
-            .restart_container(ContainerRef::IdOrName("ubuntu"), StopTimeout::Default)
+            .restart_container(
+                ContainerRef::try_from("ubuntu").unwrap(),
+                StopTimeout::Default,
+            )
             .await
         else {
             panic!("not an HTTP error");
@@ -827,7 +839,10 @@ mod tests {
         );
 
         let Err(ApiEndpointCallError::Daemon { status, message }) = client
-            .stop_container(ContainerRef::IdOrName("ubuntu"), StopTimeout::Default)
+            .stop_container(
+                ContainerRef::try_from("ubuntu").unwrap(),
+                StopTimeout::Default,
+            )
             .await
         else {
             panic!("not the daemon's error");
@@ -914,7 +929,10 @@ mod tests {
         );
 
         let outcome = client
-            .stop_container(ContainerRef::IdOrName("ubuntu"), StopTimeout::Default)
+            .stop_container(
+                ContainerRef::try_from("ubuntu").unwrap(),
+                StopTimeout::Default,
+            )
             .await
             .unwrap();
 
@@ -946,7 +964,10 @@ mod tests {
         );
 
         let outcome = client
-            .stop_container(ContainerRef::IdOrName("ubuntu"), StopTimeout::Default)
+            .stop_container(
+                ContainerRef::try_from("ubuntu").unwrap(),
+                StopTimeout::Default,
+            )
             .await
             .unwrap();
 
@@ -996,7 +1017,10 @@ mod tests {
         );
 
         let result = client
-            .stop_container(ContainerRef::IdOrName("ubuntu"), StopTimeout::Default)
+            .stop_container(
+                ContainerRef::try_from("ubuntu").unwrap(),
+                StopTimeout::Default,
+            )
             .await;
 
         assert!(matches!(
