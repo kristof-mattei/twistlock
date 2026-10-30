@@ -40,6 +40,7 @@ tracing = "0.1.44"
 url = "2.5.8"
 
 [dev-dependencies]
+mockito = "=1.7.2"
 pretty_assertions = "=1.4.1"
 rcgen = { version = "=0.14.10", default-features = false, features = [
     "aws_lc_rs",
