@@ -13,10 +13,10 @@ pub enum TransportError {
 /// Error type for endpoint calls.
 #[derive(Debug, Error)]
 pub enum ApiEndpointCallError {
-    /// Unaccepted status, body is the daemon's `ErrorResponse`.
+    /// Unhandled status, body is the daemon's `ErrorResponse`.
     #[error("Daemon error: {}, message: {}", .status, .message)]
     Daemon { status: StatusCode, message: String },
-    /// Unaccepted status, body is not an `ErrorResponse`.
+    /// Unhandled status, body is not an `ErrorResponse`.
     #[error("HTTP error: {}, body: {}", .status, .body)]
     HttpError { status: StatusCode, body: String },
     #[error("Failed to serialize the request parameters")]
@@ -55,7 +55,7 @@ pub(crate) fn parse_json<T: DeserializeOwned>(
 pub(crate) trait ApiEndpoint {
     /// Request.
     type Request<'r>: ?Sized;
-    /// Accepted response.
+    /// Response for a handled status.
     type Response;
 
     /// HTTP method for this endpoint.
