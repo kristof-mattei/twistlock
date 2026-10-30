@@ -821,6 +821,23 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn stop_with_not_found_is_the_daemon_error() {
+        let (client, _body) = serve(
+            "HTTP/1.1 404 Not Found\r\ncontent-length: 39\r\n\r\n{\"message\":\"No such container: ubuntu\"}",
+        );
+
+        let Err(ApiEndpointCallError::Daemon { status, message }) = client
+            .stop_container(ContainerRef::IdOrName("ubuntu"), StopTimeout::Default)
+            .await
+        else {
+            panic!("not the daemon's error");
+        };
+
+        assert_eq!(status, 404);
+        assert_eq!(message, "No such container: ubuntu");
+    }
+
+    #[tokio::test]
     async fn unsuccessful_subscription_returns_the_daemon_error() {
         let (client, _body) = serve(
             "HTTP/1.1 500 Internal Server Error\r\ncontent-length: 18\r\n\r\n{\"message\":\"boom\"}",
