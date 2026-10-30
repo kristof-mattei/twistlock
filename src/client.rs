@@ -14,8 +14,7 @@ use tracing::{Level, event};
 use crate::config::{Endpoint, TcpAddress, Tls, Transport};
 use crate::endpoint::{ApiEndpoint, ApiEndpointCallError, TransportError, is_success};
 use crate::endpoints::containers::{
-    InspectContainer, ListContainers, RestartContainer, RestartContainerRequest, StopContainer,
-    StopContainerRequest,
+    InspectContainer, ListContainers, RestartContainer, RestartRequest, StopContainer, StopRequest,
 };
 use crate::endpoints::networks::{InspectNetwork, ListNetworks};
 use crate::filters::Filters;
@@ -316,7 +315,7 @@ impl Client {
         container: C,
         timeout: StopTimeout,
     ) -> Result<(), ApiEndpointCallError> {
-        self.call::<RestartContainer>(&RestartContainerRequest {
+        self.call::<RestartContainer>(&RestartRequest {
             container: container.into(),
             timeout,
         })
@@ -343,7 +342,7 @@ impl Client {
         container: C,
         timeout: StopTimeout,
     ) -> Result<StopOutcome, ApiEndpointCallError> {
-        self.call::<StopContainer>(&StopContainerRequest {
+        self.call::<StopContainer>(&StopRequest {
             container: container.into(),
             timeout,
         })
