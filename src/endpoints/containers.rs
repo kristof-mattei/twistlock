@@ -1,7 +1,7 @@
 use http::{Method, StatusCode};
 
 use crate::client::url_encode;
-use crate::endpoint::ApiEndpoint;
+use crate::endpoint::{ApiEndpoint, ParseError, is_success, parse_json};
 use crate::filters::Filters;
 use crate::models::container::{ContainerSummary, StopOutcome, StopTimeout};
 use crate::models::container_inspect::ContainerInspect;
@@ -27,11 +27,8 @@ impl ApiEndpoint for ListContainers {
         ))
     }
 
-    fn parse_response(
-        _status: StatusCode,
-        bytes: &[u8],
-    ) -> Result<Self::Response, serde_json::Error> {
-        serde_json::from_slice(bytes)
+    fn parse_response(status: StatusCode, bytes: &[u8]) -> Result<Self::Response, ParseError> {
+        parse_json(status, bytes)
     }
 }
 
@@ -47,11 +44,8 @@ impl ApiEndpoint for InspectContainer {
         Ok(format!("/containers/{}/json", request.as_str()))
     }
 
-    fn parse_response(
-        _status: StatusCode,
-        bytes: &[u8],
-    ) -> Result<Self::Response, serde_json::Error> {
-        serde_json::from_slice(bytes)
+    fn parse_response(status: StatusCode, bytes: &[u8]) -> Result<Self::Response, ParseError> {
+        parse_json(status, bytes)
     }
 }
 
@@ -90,11 +84,12 @@ impl ApiEndpoint for RestartContainer {
         Ok(stop_timeout_path(request, "restart"))
     }
 
-    fn parse_response(
-        _status: StatusCode,
-        _bytes: &[u8],
-    ) -> Result<Self::Response, serde_json::Error> {
-        Ok(())
+    fn parse_response(status: StatusCode, _bytes: &[u8]) -> Result<Self::Response, ParseError> {
+        if is_success(status) {
+            Ok(())
+        } else {
+            Err(ParseError::Status)
+        }
     }
 }
 
@@ -110,18 +105,13 @@ impl ApiEndpoint for StopContainer {
         Ok(stop_timeout_path(request, "stop"))
     }
 
-    fn accepts(status: StatusCode) -> bool {
-        status.is_success() || status == StatusCode::NOT_MODIFIED
-    }
-
-    fn parse_response(
-        status: StatusCode,
-        _bytes: &[u8],
-    ) -> Result<Self::Response, serde_json::Error> {
+    fn parse_response(status: StatusCode, _bytes: &[u8]) -> Result<Self::Response, ParseError> {
         if status == StatusCode::NOT_MODIFIED {
             Ok(StopOutcome::AlreadyStopped)
-        } else {
+        } else if is_success(status) {
             Ok(StopOutcome::Stopped)
+        } else {
+            Err(ParseError::Status)
         }
     }
 }

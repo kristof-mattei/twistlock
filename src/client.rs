@@ -12,7 +12,7 @@ use thiserror::Error;
 use tracing::{Level, event};
 
 use crate::config::{Endpoint, TcpAddress, Tls, Transport};
-use crate::endpoint::{ApiEndpoint, ApiEndpointCallError, TransportError, is_success};
+use crate::endpoint::{ApiEndpoint, ApiEndpointCallError, ParseError, TransportError, is_success};
 use crate::endpoints::containers::{
     InspectContainer, ListContainers, RestartContainer, RestartRequest, StopContainer, StopRequest,
 };
@@ -66,6 +66,24 @@ async fn read_body(response: Response) -> Result<Bytes, TransportError> {
 #[derive(Deserialize)]
 struct ErrorResponse {
     message: String,
+}
+
+fn status_error(status_code: StatusCode, bytes: &[u8]) -> ApiEndpointCallError {
+    if let Ok(error_response) = serde_json::from_slice::<ErrorResponse>(bytes) {
+        return ApiEndpointCallError::Daemon {
+            status: status_code,
+            message: error_response.message,
+        };
+    }
+
+    let body = String::from_utf8_lossy(bytes).into_owned();
+
+    event!(Level::ERROR, %status_code, message = %body, "Invalid response");
+
+    ApiEndpointCallError::HttpError {
+        status: status_code,
+        body,
+    }
 }
 
 fn without_loopback_proxy(builder: ClientBuilder, address: &TcpAddress) -> ClientBuilder {
@@ -174,38 +192,12 @@ impl Client {
         &self,
         path_and_query: &str,
         method: Method,
-        accepts: fn(StatusCode) -> bool,
-    ) -> Result<Response, ApiEndpointCallError> {
-        let response = self
-            .client
+    ) -> Result<Response, TransportError> {
+        self.client
             .request(method, format!("{}{}", self.base_url, path_and_query))
             .send()
             .await
-            .map_err(TransportError::Send)?;
-
-        let status_code = response.status();
-
-        if accepts(status_code) {
-            return Ok(response);
-        }
-
-        let bytes = read_body(response).await?;
-
-        if let Ok(error_response) = serde_json::from_slice::<ErrorResponse>(&bytes) {
-            return Err(ApiEndpointCallError::Daemon {
-                status: status_code,
-                message: error_response.message,
-            });
-        }
-
-        let body = String::from_utf8_lossy(&bytes).into_owned();
-
-        event!(Level::ERROR, %status_code, message = %body, "Invalid response");
-
-        Err(ApiEndpointCallError::HttpError {
-            status: status_code,
-            body,
-        })
+            .map_err(TransportError::Send)
     }
 
     /// Call a typed [`ApiEndpoint`], returning a structured error on failure.
@@ -216,7 +208,7 @@ impl Client {
     ///
     /// * Failure to build the path and query
     /// * Failure to send the request
-    /// * The endpoint does not accept the status
+    /// * The endpoint does not handle the status
     /// * Failed to deserialize the response
     pub(crate) async fn call<E: ApiEndpoint>(
         &self,
@@ -224,17 +216,18 @@ impl Client {
     ) -> Result<E::Response, ApiEndpointCallError> {
         let path_and_query = E::path_and_query(request).map_err(ApiEndpointCallError::Query)?;
 
-        let response = self
-            .send_request(&path_and_query, E::METHOD, E::accepts)
-            .await?;
+        let response = self.send_request(&path_and_query, E::METHOD).await?;
 
         let status = response.status();
 
         let bytes = read_body(response).await?;
 
-        E::parse_response(status, &bytes).map_err(|error| {
-            event!(Level::ERROR, ?error, message = %String::from_utf8_lossy(&bytes), "Failed to deserialize response");
-            ApiEndpointCallError::Deserialize(error)
+        E::parse_response(status, &bytes).map_err(|error| match error {
+            ParseError::Status => status_error(status, &bytes),
+            ParseError::Body(error) => {
+                event!(Level::ERROR, ?error, message = %String::from_utf8_lossy(&bytes), "Failed to deserialize response");
+                ApiEndpointCallError::Deserialize(error)
+            },
         })
     }
 
@@ -356,9 +349,15 @@ impl Client {
     /// * Failure to send the request
     /// * Response is not success
     pub async fn subscribe_events(&self) -> Result<EventSubscription, ApiEndpointCallError> {
-        let response = self
-            .send_request("/events", Method::GET, is_success)
-            .await?;
+        let response = self.send_request("/events", Method::GET).await?;
+
+        let status = response.status();
+
+        if !is_success(status) {
+            let bytes = read_body(response).await?;
+
+            return Err(status_error(status, &bytes));
+        }
 
         Ok(EventSubscription {
             lines: EventLines::new(reqwest::Body::from(response)),
