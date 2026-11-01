@@ -1,4 +1,44 @@
 <!-- header goes here -->
+## [0.12.0](https://github.com/kristof-mattei/twistlock/compare/v0.11.0..v0.12.0) - 2026-11-01
+
+### ⚠️ Breaking Changes
+
+- *(models)* Validate `ContainerRef` against Docker's naming rules and percent-encode `NetworkRef` by [@kristof-mattei](https://github.com/kristof-mattei) ([`86bfb81`](https://github.com/kristof-mattei/twistlock/commit/86bfb814d8ac91296da8b46bdd4fb25116b43bcb))
+- *(client)* Return `Query` and `Subscribe` from the list, inspect and event calls, with an opt-in `timeout` by [@kristof-mattei](https://github.com/kristof-mattei) ([`203a31b`](https://github.com/kristof-mattei/twistlock/commit/203a31b8553d2e73018758edce896e455205748f))
+
+  `list_containers`, `inspect_container`, `list_networks`, `inspect_network` and `subscribe_events` return a `Query` or a `Subscribe` instead of a future, and `TransportError` has a new `Timeout` variant. To send a request, call `.send().await`. To limit the request, call `.timeout(limit)` first:
+
+    ```rust
+    let containers = client
+        .list_containers(&filters)
+        .timeout(Duration::from_secs(30))
+        .send()
+        .await?;
+    ```
+
+### 📚 Documentation
+
+- *(client)* Explain when the `restart_container` future resolves by [@kristof-mattei](https://github.com/kristof-mattei) ([`9d6b7bd`](https://github.com/kristof-mattei/twistlock/commit/9d6b7bd189b1549b3684dd0a4a13aaccc1b422bc))
+- *(endpoint)* Describe statuses as handled or unhandled instead of accepted by [@kristof-mattei](https://github.com/kristof-mattei) ([`c7a5f81`](https://github.com/kristof-mattei/twistlock/commit/c7a5f81c8c46d49836aa6508cb5dddf150a76182))
+- Declare Docker Engine 25.0 as the minimum version by [@kristof-mattei](https://github.com/kristof-mattei) ([`45b4ce2`](https://github.com/kristof-mattei/twistlock/commit/45b4ce248ef6ae1954b1c45c055131e43ee96554))
+- Replace human verbs for the daemon, the client and a chunk with technical ones by [@kristof-mattei](https://github.com/kristof-mattei) ([`62dd699`](https://github.com/kristof-mattei/twistlock/commit/62dd6995332c9f65e0756c5f0b8c5fceac04351c))
+
+### ⚡ Performance
+
+- Remove the redundant workspace build from `Dockerfile` by [@kristof-mattei](https://github.com/kristof-mattei) ([`23c6dc3`](https://github.com/kristof-mattei/twistlock/commit/23c6dc32e5e06e82e0129b22eb99221233fd73cb))
+
+### 🚜 Refactor
+
+- *(endpoint)* Share the default `accepts` rule with `subscribe_events` by [@kristof-mattei](https://github.com/kristof-mattei) ([`c65837d`](https://github.com/kristof-mattei/twistlock/commit/c65837d5daaf04456ff2545c4f7dcacf0f5ed69f))
+- *(endpoint)* Merge `accepts` into `parse_response` and add `parse_json` by [@kristof-mattei](https://github.com/kristof-mattei) ([`8e68ac5`](https://github.com/kristof-mattei/twistlock/commit/8e68ac5407c8dcbba94b6137636baf94bfe41a0e))
+- *(endpoints)* Make `RestartRequest` an alias of `StopRequest` by [@kristof-mattei](https://github.com/kristof-mattei) ([`1e40fc1`](https://github.com/kristof-mattei/twistlock/commit/1e40fc167006d75e8ca4dbbcb32ca81ec0ab2736))
+
+### 🧪 Testing
+
+- *(client)* `Client::call` maps an `ErrorResponse` to `ApiEndpointCallError::Daemon` by [@kristof-mattei](https://github.com/kristof-mattei) ([`c039805`](https://github.com/kristof-mattei/twistlock/commit/c03980579f56a528ff183b9cde27f88ed1952242))
+- *(endpoints)* Remove the duplicate `204` and `304` mapping tests of `StopContainer` by [@kristof-mattei](https://github.com/kristof-mattei) ([`af9c8d8`](https://github.com/kristof-mattei/twistlock/commit/af9c8d80beb6f020fdefd18c2b95bfd32def195b))
+- Decode list and inspect responses, and map undecodable and truncated bodies to `Deserialize` and `TransportError::Body` by [@kristof-mattei](https://github.com/kristof-mattei) ([`a6c04ca`](https://github.com/kristof-mattei/twistlock/commit/a6c04ca0e1f15d140442230be496116df1a90b35))
+- Move the fake daemon tests to `tests/fake_daemon.rs` by [@kristof-mattei](https://github.com/kristof-mattei) ([`a4a2345`](https://github.com/kristof-mattei/twistlock/commit/a4a2345cd9b5325661fae7610e3f01f62b55e8c7))
 ## [0.11.0](https://github.com/kristof-mattei/twistlock/compare/v0.10.0..v0.11.0) - 2026-10-29
 
 ### ⚠️ Breaking Changes
