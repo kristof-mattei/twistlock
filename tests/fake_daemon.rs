@@ -16,6 +16,10 @@ use rustls::{
     ConfigBuilder, RootCertStore, ServerConfig, ServerConnection, StreamOwned, WantsVerifier,
 };
 use tempfile::TempDir;
+#[cfg(windows)]
+use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
+#[cfg(windows)]
+use tokio::net::windows::named_pipe::ServerOptions;
 use twistlock::client::{Client, EventStreamError};
 use twistlock::config::{ClientCredentialPaths, Endpoint, Tls};
 use twistlock::endpoint::{ApiEndpointCallError, TransportError};
@@ -299,6 +303,49 @@ async fn stop_over_a_socket_is_stopped() {
     );
 
     let endpoint = Endpoint::from_str(&format!("unix://{}", path.display())).unwrap();
+    let client = Client::build(endpoint).unwrap();
+
+    let outcome = client
+        .stop_container(
+            ContainerRef::try_from("ubuntu").unwrap(),
+            StopTimeout::Default,
+        )
+        .await
+        .unwrap();
+
+    assert!(matches!(outcome, StopOutcome::Stopped));
+}
+
+#[cfg(windows)]
+#[tokio::test]
+async fn stop_over_a_named_pipe_is_stopped() {
+    let name = format!("twistlock-{}", std::process::id());
+    let mut server = ServerOptions::new()
+        .first_pipe_instance(true)
+        .create(format!(r"\\.\pipe\{}", name))
+        .unwrap();
+
+    tokio::spawn(async move {
+        server.connect().await.unwrap();
+
+        let mut request = Vec::new();
+        let mut byte = [0_u8; 1];
+
+        while !request.ends_with(b"\r\n\r\n") {
+            server.read_exact(&mut byte).await.unwrap();
+            request.push(byte[0]);
+        }
+
+        server
+            .write_all(b"HTTP/1.1 204 No Content\r\n\r\n")
+            .await
+            .unwrap();
+
+        // keeps the pipe open until the client closes it
+        let _closed = server.read(&mut byte).await;
+    });
+
+    let endpoint = Endpoint::from_str(&format!("npipe:////./pipe/{}", name)).unwrap();
     let client = Client::build(endpoint).unwrap();
 
     let outcome = client
