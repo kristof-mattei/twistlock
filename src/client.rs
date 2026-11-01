@@ -63,6 +63,41 @@ async fn read_body(response: Response) -> Result<Bytes, TransportError> {
     response.bytes().await.map_err(TransportError::Body)
 }
 
+#[cfg(not(windows))]
+async fn send(
+    client: &reqwest::Client,
+    method: Method,
+    url: &str,
+) -> Result<Response, reqwest::Error> {
+    client.request(method, url).send().await
+}
+
+#[cfg(windows)]
+async fn send(
+    client: &reqwest::Client,
+    method: Method,
+    url: &str,
+) -> Result<Response, reqwest::Error> {
+    loop {
+        match client.request(method.clone(), url).send().await {
+            Err(error) if is_pipe_busy(&error) => {
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            },
+            result => return result,
+        }
+    }
+}
+
+#[cfg(windows)]
+fn is_pipe_busy(error: &reqwest::Error) -> bool {
+    // https://learn.microsoft.com/en-us/windows/win32/debug/system-error-codes--0-499-#:~:text=ERROR_PIPE_BUSY,busy.
+    const ERROR_PIPE_BUSY: i32 = 231;
+
+    std::iter::successors(std::error::Error::source(error), |source| source.source())
+        .filter_map(|source| source.downcast_ref::<std::io::Error>())
+        .any(|source| source.raw_os_error() == Some(ERROR_PIPE_BUSY))
+}
+
 async fn within<T, E: From<TransportError>>(
     limit: Option<Duration>,
     future: impl Future<Output = Result<T, E>>,
@@ -219,9 +254,9 @@ impl Client {
         path_and_query: &str,
         method: Method,
     ) -> Result<Response, TransportError> {
-        self.client
-            .request(method, format!("{}{}", self.base_url, path_and_query))
-            .send()
+        let url = format!("{}{}", self.base_url, path_and_query);
+
+        send(&self.client, method, &url)
             .await
             .map_err(TransportError::Send)
     }
