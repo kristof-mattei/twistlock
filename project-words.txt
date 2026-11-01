@@ -23,11 +23,13 @@ idents
 keepalive
 kristof
 lintian
+ltsc
 mattei
 mkhl
 monomorphization
 msvc
 multiplatform
+nanoserver
 netns
 nextest
 npipe
