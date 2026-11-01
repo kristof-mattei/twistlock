@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use http::{Method, StatusCode};
 use serde::de::DeserializeOwned;
 use thiserror::Error;
@@ -8,6 +10,9 @@ pub enum TransportError {
     Send(#[source] reqwest::Error),
     #[error("Failed to read the response body")]
     Body(#[source] reqwest::Error),
+    /// See [`crate::client::Query::timeout`] and [`crate::client::Subscribe::timeout`].
+    #[error("Timed out after {:?}", .0)]
+    Timeout(Duration),
 }
 
 /// Error type for endpoint calls.
