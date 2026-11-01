@@ -63,6 +63,18 @@ async fn read_body(response: Response) -> Result<Bytes, TransportError> {
     response.bytes().await.map_err(TransportError::Body)
 }
 
+async fn within<T>(
+    limit: Option<Duration>,
+    future: impl Future<Output = Result<T, TransportError>>,
+) -> Result<T, TransportError> {
+    match limit {
+        Some(limit) => tokio::time::timeout(limit, future)
+            .await
+            .map_err(|_elapsed| TransportError::Timeout(limit))?,
+        None => future.await,
+    }
+}
+
 #[derive(Deserialize)]
 struct ErrorResponse {
     message: String,
@@ -131,10 +143,14 @@ fn with_tls(builder: ClientBuilder, tls: Tls) -> Result<ClientBuilder, BuildErro
     }
 }
 
+/// The default of [`Client::with_response_timeout`].
+pub const DEFAULT_RESPONSE_TIMEOUT: Duration = Duration::from_secs(60);
+
 #[derive(Debug)]
 pub struct Client {
-    client: reqwest::Client,
+    http: reqwest::Client,
     base_url: String,
+    response_timeout: Option<Duration>,
 }
 
 impl Client {
@@ -183,9 +199,26 @@ impl Client {
         };
 
         Ok(Client {
-            client: builder.build().map_err(BuildError::Client)?,
+            http: builder.build().map_err(BuildError::Client)?,
             base_url,
+            response_timeout: Some(DEFAULT_RESPONSE_TIMEOUT),
         })
+    }
+
+    /// Sets the time limit of these calls, or removes it with `None`:
+    ///
+    /// * [`Client::list_containers`]
+    /// * [`Client::inspect_container`]
+    /// * [`Client::list_networks`]
+    /// * [`Client::inspect_network`]
+    /// * [`Client::subscribe_events`], up to the response head
+    ///
+    /// A call over the limit fails with [`TransportError::Timeout`]. The default is [`DEFAULT_RESPONSE_TIMEOUT`].
+    #[must_use]
+    pub fn with_response_timeout(mut self, response_timeout: Option<Duration>) -> Self {
+        self.response_timeout = response_timeout;
+
+        self
     }
 
     async fn send_request(
@@ -193,7 +226,7 @@ impl Client {
         path_and_query: &str,
         method: Method,
     ) -> Result<Response, TransportError> {
-        self.client
+        self.http
             .request(method, format!("{}{}", self.base_url, path_and_query))
             .send()
             .await
@@ -216,11 +249,17 @@ impl Client {
     ) -> Result<E::Response, ApiEndpointCallError> {
         let path_and_query = E::path_and_query(request).map_err(ApiEndpointCallError::Query)?;
 
-        let response = self.send_request(&path_and_query, E::METHOD).await?;
+        let exchange = async {
+            let response = self.send_request(&path_and_query, E::METHOD).await?;
 
-        let status = response.status();
+            let status = response.status();
 
-        let bytes = read_body(response).await?;
+            Ok((status, read_body(response).await?))
+        };
+
+        let limit = self.response_timeout.filter(|_| E::HAS_RESPONSE_TIMEOUT);
+
+        let (status, bytes) = within(limit, exchange).await?;
 
         E::parse_response(status, &bytes).map_err(|error| match error {
             ParseError::Status => status_error(status, &bytes),
@@ -239,6 +278,7 @@ impl Client {
     ///
     /// * Failure to send the request
     /// * Response is not success
+    /// * No complete response within the response timeout
     pub async fn list_containers(
         &self,
         filters: &Filters,
@@ -254,6 +294,7 @@ impl Client {
     ///
     /// * Failure to send the request
     /// * Response is not success
+    /// * No complete response within the response timeout
     pub async fn inspect_container<'r, C: Into<ContainerRef<'r>>>(
         &self,
         container: C,
@@ -269,6 +310,7 @@ impl Client {
     ///
     /// * Failure to send the request
     /// * Response is not success
+    /// * No complete response within the response timeout
     pub async fn list_networks(&self) -> Result<Vec<NetworkSummary>, ApiEndpointCallError> {
         self.call::<ListNetworks>(&()).await
     }
@@ -281,6 +323,7 @@ impl Client {
     ///
     /// * Failure to send the request
     /// * Response is not success
+    /// * No complete response within the response timeout
     pub async fn inspect_network<'r, N: Into<NetworkRef<'r>>>(
         &self,
         network: N,
@@ -348,16 +391,21 @@ impl Client {
     ///
     /// * Failure to send the request
     /// * Response is not success
+    /// * No response head within the response timeout
     pub async fn subscribe_events(&self) -> Result<EventSubscription, ApiEndpointCallError> {
-        let response = self.send_request("/events", Method::GET).await?;
+        let head = async {
+            let response = self.send_request("/events", Method::GET).await?;
 
-        let status = response.status();
+            let status = response.status();
 
-        if !is_success(status) {
-            let bytes = read_body(response).await?;
+            if is_success(status) {
+                Ok(Ok(response))
+            } else {
+                Ok(Err(status_error(status, &read_body(response).await?)))
+            }
+        };
 
-            return Err(status_error(status, &bytes));
-        }
+        let response = within(self.response_timeout, head).await??;
 
         Ok(EventSubscription {
             lines: EventLines::new(reqwest::Body::from(response)),
@@ -464,6 +512,7 @@ mod tests {
     use std::str::FromStr as _;
     use std::sync::Arc;
     use std::task::{Context, Poll};
+    use std::time::Duration;
 
     use bytes::Bytes;
     use http_body::{Body, Frame};
@@ -770,6 +819,60 @@ mod tests {
             client.list_networks().await,
             Err(ApiEndpointCallError::Transport(TransportError::Body(_)))
         ));
+    }
+
+    #[tokio::test]
+    async fn list_without_a_response_is_a_timeout() {
+        let (client, _body) = serve("");
+
+        let result = client
+            .with_response_timeout(Some(Duration::from_millis(100)))
+            .list_networks()
+            .await;
+
+        assert!(matches!(
+            result,
+            Err(ApiEndpointCallError::Transport(TransportError::Timeout(limit)))
+                if limit == Duration::from_millis(100)
+        ));
+    }
+
+    #[tokio::test]
+    async fn subscription_without_a_head_is_a_timeout() {
+        let (client, _body) = serve("");
+
+        let result = client
+            .with_response_timeout(Some(Duration::from_millis(100)))
+            .subscribe_events()
+            .await;
+
+        assert!(matches!(
+            result,
+            Err(ApiEndpointCallError::Transport(TransportError::Timeout(_)))
+        ));
+    }
+
+    #[tokio::test]
+    async fn stop_outlasts_the_response_timeout() {
+        let (client, body) = serve("");
+
+        tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(200)).await;
+
+            body.send("HTTP/1.1 204 No Content\r\n\r\n".to_owned())
+                .unwrap();
+        });
+
+        let outcome = client
+            .with_response_timeout(Some(Duration::from_millis(50)))
+            .stop_container(
+                ContainerRef::try_from("ubuntu").unwrap(),
+                StopTimeout::Default,
+            )
+            .await
+            .unwrap();
+
+        assert!(matches!(outcome, StopOutcome::Stopped));
     }
 
     #[tokio::test]

@@ -12,6 +12,8 @@ impl ApiEndpoint for ListNetworks {
 
     const METHOD: Method = Method::GET;
 
+    const HAS_RESPONSE_TIMEOUT: bool = true;
+
     fn path_and_query(_request: &Self::Request<'_>) -> Result<String, std::io::Error> {
         Ok("/networks".to_owned())
     }
@@ -28,6 +30,8 @@ impl ApiEndpoint for InspectNetwork {
     type Response = NetworkInspect;
 
     const METHOD: Method = Method::GET;
+
+    const HAS_RESPONSE_TIMEOUT: bool = true;
 
     fn path_and_query(request: &Self::Request<'_>) -> Result<String, std::io::Error> {
         Ok(format!("/networks/{}", request.path_segment()))

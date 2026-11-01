@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use http::{Method, StatusCode};
 use serde::de::DeserializeOwned;
 use thiserror::Error;
@@ -8,6 +10,9 @@ pub enum TransportError {
     Send(#[source] reqwest::Error),
     #[error("Failed to read the response body")]
     Body(#[source] reqwest::Error),
+    /// See [`crate::client::Client::with_response_timeout`].
+    #[error("No complete response within {:?}", .0)]
+    Timeout(Duration),
 }
 
 /// Error type for endpoint calls.
@@ -60,6 +65,9 @@ pub(crate) trait ApiEndpoint {
 
     /// HTTP method for this endpoint.
     const METHOD: Method;
+
+    /// Whether [`crate::client::Client::with_response_timeout`] applies.
+    const HAS_RESPONSE_TIMEOUT: bool;
 
     /// The path and query string for this request.
     ///

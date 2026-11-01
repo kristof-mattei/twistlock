@@ -15,6 +15,8 @@ impl ApiEndpoint for ListContainers {
 
     const METHOD: Method = Method::GET;
 
+    const HAS_RESPONSE_TIMEOUT: bool = true;
+
     fn path_and_query(request: &Self::Request<'_>) -> Result<String, std::io::Error> {
         // an `exited` filter matches nothing without `all`
         // https://docs.docker.com/reference/cli/docker/container/ls/#filter:~:text=exited
@@ -39,6 +41,8 @@ impl ApiEndpoint for InspectContainer {
     type Response = ContainerInspect;
 
     const METHOD: Method = Method::GET;
+
+    const HAS_RESPONSE_TIMEOUT: bool = true;
 
     fn path_and_query(request: &Self::Request<'_>) -> Result<String, std::io::Error> {
         Ok(format!("/containers/{}/json", request.as_str()))
@@ -80,6 +84,8 @@ impl ApiEndpoint for RestartContainer {
 
     const METHOD: Method = Method::POST;
 
+    const HAS_RESPONSE_TIMEOUT: bool = false;
+
     fn path_and_query(request: &Self::Request<'_>) -> Result<String, std::io::Error> {
         Ok(stop_timeout_path(request, "restart"))
     }
@@ -100,6 +106,8 @@ impl ApiEndpoint for StopContainer {
     type Response = StopOutcome;
 
     const METHOD: Method = Method::POST;
+
+    const HAS_RESPONSE_TIMEOUT: bool = false;
 
     fn path_and_query(request: &Self::Request<'_>) -> Result<String, std::io::Error> {
         Ok(stop_timeout_path(request, "stop"))
