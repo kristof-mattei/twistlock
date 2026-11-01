@@ -424,6 +424,34 @@ jobs:
           # which will fail All Done
           exit 1
 
+  cargo-test-real-daemon:
+    name: Cargo test (real daemon)
+    runs-on: ubuntu-26.04
+    steps:
+      - *checkout
+
+      - *set_up_mold
+
+      - *set_up_toolchain
+
+      - *set_up_sccache
+
+      - name: Install nextest
+        uses: taiki-e/install-action@v2.88.1
+        with:
+          tool: cargo-nextest
+
+      - name: Pull the fixture image
+        shell: bash
+        run: |
+          docker pull ubuntu
+
+      - name: Run the real daemon tests
+        shell: bash
+        run: |
+          # shellcheck disable=SC2086 # CARGO_FEATURES can hold more than one flag
+          cargo nextest run ${CARGO_FEATURES} --locked --test real_daemon --run-ignored only
+
   cargo-clippy-and-report:
     name: Cargo clippy (and report)
     runs-on: ubuntu-26.04
@@ -679,6 +707,7 @@ jobs:
       - cargo-semver-checks-baseline
       - cargo-test-and-report
       - cargo-test-and-report-windows
+      - cargo-test-real-daemon
     if: |
       !cancelled()
     steps:

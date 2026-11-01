@@ -1,0 +1,242 @@
+#![expect(clippy::tests_outside_test_module, reason = "Integration tests")]
+use std::process::Command;
+use std::str::FromStr as _;
+use std::time::Duration;
+
+use hashbrown::HashMap;
+use pretty_assertions::assert_eq;
+use twistlock::client::Client;
+use twistlock::config::Endpoint;
+use twistlock::endpoint::ApiEndpointCallError;
+use twistlock::filters::{Filters, Status};
+use twistlock::models::container::{StopOutcome, StopTimeout};
+use twistlock::models::events::Event;
+use twistlock::models::id::{ContainerId, ContainerRef, NetworkRef};
+
+const LABEL: &str = "twistlock.test";
+
+/// Runs `docker` and returns its trimmed standard output.
+fn docker(args: &[&str]) -> String {
+    let output = Command::new("docker").args(args).output().unwrap();
+
+    assert!(
+        output.status.success(),
+        "docker {}: {}",
+        args.join(" "),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    String::from_utf8(output.stdout).unwrap().trim().to_owned()
+}
+
+/// A running container, labeled with its own name, removed on drop.
+struct Fixture {
+    id: ContainerId,
+    name: String,
+}
+
+impl Fixture {
+    fn run(test: &str) -> Fixture {
+        let name = format!("twistlock-{}-{}", test, std::process::id());
+        let label = format!("{}={}", LABEL, name);
+
+        let id = docker(&[
+            "run", "--detach", "--name", &name, "--label", &label, "ubuntu", "sleep", "infinity",
+        ]);
+
+        Fixture {
+            id: ContainerId::new(id),
+            name,
+        }
+    }
+
+    fn reference(&self) -> ContainerRef<'_> {
+        ContainerRef::try_from(self.name.as_str()).unwrap()
+    }
+}
+
+impl Drop for Fixture {
+    fn drop(&mut self) {
+        // a panic here aborts a test that is already unwinding
+        drop(
+            Command::new("docker")
+                .args(["rm", "--force", &self.name])
+                .output(),
+        );
+    }
+}
+
+/// Connects to `DOCKER_HOST`, or to the platform default if it is unset, like the `docker` CLI.
+fn client() -> Client {
+    let host = std::env::var("DOCKER_HOST").unwrap_or_default();
+
+    Client::build(Endpoint::from_str(&host).unwrap()).unwrap()
+}
+
+#[tokio::test]
+#[ignore = "needs a Docker daemon"]
+async fn list_containers_returns_the_fixture() {
+    let fixture = Fixture::run("list");
+
+    let filters = Filters {
+        label: Some(HashMap::from([(
+            LABEL.into(),
+            Some(fixture.name.as_str().into()),
+        )])),
+        ..Filters::default()
+    };
+
+    let containers = client().list_containers(&filters).send().await.unwrap();
+
+    assert_eq!(containers.len(), 1);
+    assert_eq!(containers[0].id, fixture.id);
+    assert_eq!(&*containers[0].names, [fixture.name.as_str().into()]);
+    assert_eq!(containers[0].state, Status::Running);
+    assert_eq!(
+        containers[0].labels.get(LABEL).map(|value| &**value),
+        Some(fixture.name.as_str())
+    );
+}
+
+#[tokio::test]
+#[ignore = "needs a Docker daemon"]
+async fn inspect_container_returns_the_running_fixture() {
+    let fixture = Fixture::run("inspect");
+
+    let container = client()
+        .inspect_container(fixture.reference())
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(container.id, fixture.id);
+    assert_eq!(&*container.name, format!("/{}", fixture.name));
+    assert!(container.state.running);
+    assert_eq!(container.state.status, Status::Running);
+    assert!(container.state.health.is_none());
+    assert_eq!(
+        container.config.labels.get(LABEL).map(|value| &**value),
+        Some(fixture.name.as_str())
+    );
+}
+
+#[tokio::test]
+#[ignore = "needs a Docker daemon"]
+async fn inspect_of_a_missing_container_is_the_daemon_error() {
+    let name = format!("twistlock-missing-{}", std::process::id());
+
+    let Err(ApiEndpointCallError::Daemon { status, message }) = client()
+        .inspect_container(ContainerRef::try_from(name.as_str()).unwrap())
+        .send()
+        .await
+    else {
+        panic!("not the daemon's error");
+    };
+
+    assert_eq!(status, 404);
+    assert_eq!(message, format!("No such container: {}", name));
+}
+
+#[tokio::test]
+#[ignore = "needs a Docker daemon"]
+async fn second_stop_is_already_stopped() {
+    let fixture = Fixture::run("stop");
+    let client = client();
+
+    let first = client
+        .stop_container(fixture.reference(), StopTimeout::After(Duration::ZERO))
+        .await
+        .unwrap();
+
+    let second = client
+        .stop_container(fixture.reference(), StopTimeout::After(Duration::ZERO))
+        .await
+        .unwrap();
+
+    assert!(matches!(first, StopOutcome::Stopped));
+    assert!(matches!(second, StopOutcome::AlreadyStopped));
+
+    let container = client
+        .inspect_container(fixture.reference())
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(container.state.status, Status::Exited);
+}
+
+#[tokio::test]
+#[ignore = "needs a Docker daemon"]
+async fn restart_is_observed_by_the_subscription() {
+    let fixture = Fixture::run("restart");
+    let client = client();
+
+    let mut subscription = client.subscribe_events().send().await.unwrap();
+
+    client
+        .restart_container(fixture.reference(), StopTimeout::After(Duration::ZERO))
+        .await
+        .unwrap();
+
+    tokio::time::timeout(Duration::from_secs(30), async {
+        loop {
+            match subscription.next().await.unwrap() {
+                Ok(Event::Container(event))
+                    if event.actor.id == fixture.id && &*event.action == "restart" =>
+                {
+                    break;
+                },
+                Ok(_) => {},
+                Err(error) => panic!(
+                    "undecodable event: {}",
+                    String::from_utf8_lossy(&error.line)
+                ),
+            }
+        }
+    })
+    .await
+    .unwrap();
+
+    let container = client
+        .inspect_container(fixture.reference())
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(container.state.status, Status::Running);
+}
+
+#[tokio::test]
+#[ignore = "needs a Docker daemon"]
+async fn inspect_network_returns_the_default_network() {
+    let network = client()
+        .inspect_network(NetworkRef::try_from("bridge").unwrap())
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(&*network.name, "bridge");
+    assert!(
+        network
+            .ipam
+            .config
+            .iter()
+            .any(|config| config.subnet.is_some())
+    );
+}
+
+#[tokio::test]
+#[ignore = "needs a Docker daemon"]
+async fn list_networks_includes_the_default_network() {
+    let client = client();
+
+    let network = client
+        .inspect_network(NetworkRef::try_from("bridge").unwrap())
+        .send()
+        .await
+        .unwrap();
+
+    let networks = client.list_networks().send().await.unwrap();
+
+    assert!(networks.iter().any(|summary| summary.id == network.id));
+}
