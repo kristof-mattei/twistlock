@@ -53,6 +53,9 @@ rustls = { version = "=0.23.46", default-features = false, features = [
 ] }
 tempfile = "=3.27.0"
 
+[target.'cfg(windows)'.dev-dependencies]
+tokio = { version = "1.53.0", features = ["io-util"] }
+
 [package.metadata.cargo-machete]
 ignored = []
 
