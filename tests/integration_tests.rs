@@ -33,7 +33,11 @@ async fn list_containers_decodes_the_summaries() {
     )
     .await;
 
-    let containers = client.list_containers(&Filters::default()).await.unwrap();
+    let containers = client
+        .list_containers(&Filters::default())
+        .send()
+        .await
+        .unwrap();
 
     mock.assert_async().await;
 
@@ -51,6 +55,7 @@ async fn inspect_container_decodes_the_inspect() {
 
     let container = client
         .inspect_container(ContainerRef::try_from("ubuntu").unwrap())
+        .send()
         .await
         .unwrap();
 
@@ -64,7 +69,7 @@ async fn inspect_container_decodes_the_inspect() {
 async fn list_networks_decodes_the_summaries() {
     let (client, _server, mock) = daemon("/networks", r#"[{"Id":"88cad55e9ed7"}]"#).await;
 
-    let networks = client.list_networks().await.unwrap();
+    let networks = client.list_networks().send().await.unwrap();
 
     mock.assert_async().await;
 
@@ -81,6 +86,7 @@ async fn inspect_network_decodes_the_inspect() {
 
     let network = client
         .inspect_network(NetworkRef::try_from("bridge").unwrap())
+        .send()
         .await
         .unwrap();
 
@@ -93,7 +99,7 @@ async fn inspect_network_decodes_the_inspect() {
 async fn undecodable_body_is_a_deserialize_error() {
     let (client, _server, mock) = daemon("/networks", "{").await;
 
-    let result = client.list_networks().await;
+    let result = client.list_networks().send().await;
 
     mock.assert_async().await;
 

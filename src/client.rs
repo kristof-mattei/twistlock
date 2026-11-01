@@ -63,6 +63,18 @@ async fn read_body(response: Response) -> Result<Bytes, TransportError> {
     response.bytes().await.map_err(TransportError::Body)
 }
 
+async fn within<T, E: From<TransportError>>(
+    limit: Option<Duration>,
+    future: impl Future<Output = Result<T, E>>,
+) -> Result<T, E> {
+    match limit {
+        Some(limit) => tokio::time::timeout(limit, future)
+            .await
+            .map_err(|_elapsed| TransportError::Timeout(limit))?,
+        None => future.await,
+    }
+}
+
 #[derive(Deserialize)]
 struct ErrorResponse {
     message: String,
@@ -129,6 +141,20 @@ fn with_tls(builder: ClientBuilder, tls: Tls) -> Result<ClientBuilder, BuildErro
         },
         None => Ok(builder),
     }
+}
+
+fn parse<T>(
+    parse_response: fn(StatusCode, &[u8]) -> Result<T, ParseError>,
+    status: StatusCode,
+    bytes: &[u8],
+) -> Result<T, ApiEndpointCallError> {
+    parse_response(status, bytes).map_err(|error| match error {
+        ParseError::Status => status_error(status, bytes),
+        ParseError::Body(error) => {
+            event!(Level::ERROR, ?error, message = %String::from_utf8_lossy(bytes), "Failed to deserialize response");
+            ApiEndpointCallError::Deserialize(error)
+        },
+    })
 }
 
 #[derive(Debug)]
@@ -200,92 +226,52 @@ impl Client {
             .map_err(TransportError::Send)
     }
 
-    /// Call a typed [`ApiEndpoint`], returning a structured error on failure.
-    ///
-    /// # Errors
-    ///
-    /// This function will return an error if:
-    ///
-    /// * Failure to build the path and query
-    /// * Failure to send the request
-    /// * The endpoint does not handle the status
-    /// * Failed to deserialize the response
-    pub(crate) async fn call<E: ApiEndpoint>(
+    async fn exchange(
         &self,
-        request: &E::Request<'_>,
-    ) -> Result<E::Response, ApiEndpointCallError> {
-        let path_and_query = E::path_and_query(request).map_err(ApiEndpointCallError::Query)?;
-
-        let response = self.send_request(&path_and_query, E::METHOD).await?;
+        path_and_query: &str,
+        method: Method,
+    ) -> Result<(StatusCode, Bytes), TransportError> {
+        let response = self.send_request(path_and_query, method).await?;
 
         let status = response.status();
 
-        let bytes = read_body(response).await?;
+        Ok((status, read_body(response).await?))
+    }
 
-        E::parse_response(status, &bytes).map_err(|error| match error {
-            ParseError::Status => status_error(status, &bytes),
-            ParseError::Body(error) => {
-                event!(Level::ERROR, ?error, message = %String::from_utf8_lossy(&bytes), "Failed to deserialize response");
-                ApiEndpointCallError::Deserialize(error)
-            },
-        })
+    fn prepare<Api: ApiEndpoint>(&self, request: &Api::Request<'_>) -> Query<'_, Api::Response> {
+        Query {
+            client: self,
+            path_and_query: Api::path_and_query(request),
+            method: Api::METHOD,
+            parse_response: Api::parse_response,
+            timeout: None,
+        }
     }
 
     /// List all containers based on a filter.
-    ///
-    /// # Errors
-    ///
-    /// This function will return an error if:
-    ///
-    /// * Failure to send the request
-    /// * Response is not success
-    pub async fn list_containers(
-        &self,
-        filters: &Filters,
-    ) -> Result<Vec<ContainerSummary>, ApiEndpointCallError> {
-        self.call::<ListContainers>(filters).await
+    pub fn list_containers(&self, filters: &Filters) -> Query<'_, Vec<ContainerSummary>> {
+        self.prepare::<ListContainers>(filters)
     }
 
     /// Inspect container.
-    ///
-    /// # Errors
-    ///
-    /// This function will return an error if:
-    ///
-    /// * Failure to send the request
-    /// * Response is not success
-    pub async fn inspect_container<'r, C: Into<ContainerRef<'r>>>(
+    pub fn inspect_container<'r, C: Into<ContainerRef<'r>>>(
         &self,
         container: C,
-    ) -> Result<ContainerInspect, ApiEndpointCallError> {
-        self.call::<InspectContainer>(&container.into()).await
+    ) -> Query<'_, ContainerInspect> {
+        self.prepare::<InspectContainer>(&container.into())
     }
 
     /// Get all networks.
-    ///
-    /// # Errors
-    ///
-    /// This function will return an error if:
-    ///
-    /// * Failure to send the request
-    /// * Response is not success
-    pub async fn list_networks(&self) -> Result<Vec<NetworkSummary>, ApiEndpointCallError> {
-        self.call::<ListNetworks>(&()).await
+    pub fn list_networks(&self) -> Query<'_, Vec<NetworkSummary>> {
+        self.prepare::<ListNetworks>(&())
     }
 
     /// Inspect network.
-    ///
-    /// # Errors
-    ///
-    /// This function will return an error if:
-    ///
-    /// * Failure to send the request
-    /// * Response is not success
-    pub async fn inspect_network<'r, N: Into<NetworkRef<'r>>>(
+    pub fn inspect_network<'r, N: Into<NetworkRef<'r>>>(
         &self,
         network: N,
-    ) -> Result<NetworkInspect, ApiEndpointCallError> {
-        self.call::<InspectNetwork>(&network.into()).await
+    ) -> Query<'_, NetworkInspect> {
+        self.prepare::<InspectNetwork>(&network.into())
     }
 
     /// Restart a container.
@@ -308,11 +294,12 @@ impl Client {
         container: C,
         timeout: StopTimeout,
     ) -> Result<(), ApiEndpointCallError> {
-        self.call::<RestartContainer>(&RestartRequest {
+        let request = RestartRequest {
             container: container.into(),
             timeout,
-        })
-        .await
+        };
+
+        self.prepare::<RestartContainer>(&request).send().await
     }
 
     /// Stop a container.
@@ -335,11 +322,83 @@ impl Client {
         container: C,
         timeout: StopTimeout,
     ) -> Result<StopOutcome, ApiEndpointCallError> {
-        self.call::<StopContainer>(&StopRequest {
+        let request = StopRequest {
             container: container.into(),
             timeout,
-        })
-        .await
+        };
+
+        self.prepare::<StopContainer>(&request).send().await
+    }
+
+    /// Subscribe to the daemon's events.
+    pub fn subscribe_events(&self) -> Subscribe<'_> {
+        Subscribe {
+            client: self,
+            timeout: None,
+        }
+    }
+}
+
+/// A request to the daemon. Nothing reaches the daemon until [`Query::send`] is awaited.
+#[must_use]
+pub struct Query<'c, T> {
+    client: &'c Client,
+    #[expect(
+        clippy::struct_field_names,
+        reason = "the same term as `ApiEndpoint::path_and_query`"
+    )]
+    path_and_query: Result<String, std::io::Error>,
+    method: Method,
+    parse_response: fn(StatusCode, &[u8]) -> Result<T, ParseError>,
+    timeout: Option<Duration>,
+}
+
+impl<T> Query<'_, T> {
+    /// Sets a time limit on [`Query::send`]. Default is no timeout.
+    pub fn timeout(mut self, timeout: Duration) -> Self {
+        self.timeout = Some(timeout);
+
+        self
+    }
+
+    /// Send the request and parse the response.
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    ///
+    /// * Failure to build the path and query
+    /// * Failure to send the request
+    /// * Failure to read the response body
+    /// * Response is not success
+    /// * Failure to deserialize the response
+    /// * No complete response within the timeout, as [`TransportError::Timeout`]
+    pub async fn send(self) -> Result<T, ApiEndpointCallError> {
+        let path_and_query = self.path_and_query.map_err(ApiEndpointCallError::Query)?;
+
+        let (status, bytes) = within(
+            self.timeout,
+            self.client.exchange(&path_and_query, self.method),
+        )
+        .await?;
+
+        parse(self.parse_response, status, &bytes)
+    }
+}
+
+/// An event subscription. Nothing reaches the daemon until [`Subscribe::send`] is awaited.
+#[must_use]
+pub struct Subscribe<'c> {
+    client: &'c Client,
+    timeout: Option<Duration>,
+}
+
+impl Subscribe<'_> {
+    /// Sets a time limit on [`Subscribe::send`], which covers the response head and, for a non-`2xx` status, the error body. The event stream has no time limit. Default is no timeout.
+    pub fn timeout(mut self, timeout: Duration) -> Self {
+        self.timeout = Some(timeout);
+
+        self
     }
 
     /// Resolves after the response head arrives.
@@ -347,17 +406,22 @@ impl Client {
     /// # Errors
     ///
     /// * Failure to send the request
+    /// * Failure to read the response body
     /// * Response is not success
-    pub async fn subscribe_events(&self) -> Result<EventSubscription, ApiEndpointCallError> {
-        let response = self.send_request("/events", Method::GET).await?;
+    /// * The time limit elapses, as [`TransportError::Timeout`]
+    pub async fn send(self) -> Result<EventSubscription, ApiEndpointCallError> {
+        let response = within(self.timeout, async {
+            let response = self.client.send_request("/events", Method::GET).await?;
 
-        let status = response.status();
+            let status = response.status();
 
-        if !is_success(status) {
-            let bytes = read_body(response).await?;
-
-            return Err(status_error(status, &bytes));
-        }
+            if is_success(status) {
+                Ok(response)
+            } else {
+                Err(status_error(status, &read_body(response).await?))
+            }
+        })
+        .await?;
 
         Ok(EventSubscription {
             lines: EventLines::new(reqwest::Body::from(response)),
@@ -464,6 +528,7 @@ mod tests {
     use std::str::FromStr as _;
     use std::sync::Arc;
     use std::task::{Context, Poll};
+    use std::time::Duration;
 
     use bytes::Bytes;
     use http_body::{Body, Frame};
@@ -720,7 +785,7 @@ mod tests {
     async fn response_head_returns_the_subscription() {
         let (client, body) = serve("HTTP/1.1 200 OK\r\ntransfer-encoding: chunked\r\n\r\n");
 
-        let mut subscription = client.subscribe_events().await.unwrap();
+        let mut subscription = client.subscribe_events().send().await.unwrap();
 
         let start = line("start");
 
@@ -744,7 +809,7 @@ mod tests {
     async fn broken_chunk_is_a_frame_error() {
         let (client, body) = serve("HTTP/1.1 200 OK\r\ntransfer-encoding: chunked\r\n\r\n");
 
-        let mut subscription = client.subscribe_events().await.unwrap();
+        let mut subscription = client.subscribe_events().send().await.unwrap();
 
         // the chunk size is 5, and the connection closes after 2 bytes
         body.send("5\r\nab".to_owned()).unwrap();
@@ -767,9 +832,97 @@ mod tests {
         drop(body);
 
         assert!(matches!(
-            client.list_networks().await,
+            client.list_networks().send().await,
             Err(ApiEndpointCallError::Transport(TransportError::Body(_)))
         ));
+    }
+
+    /// Fails the test instead of hanging when the time limit under test does not apply.
+    async fn bounded<F: Future>(future: F) -> F::Output {
+        tokio::time::timeout(Duration::from_secs(5), future)
+            .await
+            .unwrap()
+    }
+
+    #[tokio::test]
+    async fn list_without_a_response_is_a_timeout() {
+        let (client, _body) = serve("");
+
+        let result = bounded(
+            client
+                .list_networks()
+                .timeout(Duration::from_millis(100))
+                .send(),
+        )
+        .await;
+
+        assert!(matches!(
+            result,
+            Err(ApiEndpointCallError::Transport(TransportError::Timeout(limit)))
+                if limit == Duration::from_millis(100)
+        ));
+    }
+
+    #[tokio::test]
+    async fn list_with_a_stalled_body_is_a_timeout() {
+        let (client, _body) = serve("HTTP/1.1 200 OK\r\ncontent-length: 2\r\n\r\n");
+
+        let result = bounded(
+            client
+                .list_networks()
+                .timeout(Duration::from_millis(100))
+                .send(),
+        )
+        .await;
+
+        assert!(matches!(
+            result,
+            Err(ApiEndpointCallError::Transport(TransportError::Timeout(limit)))
+                if limit == Duration::from_millis(100)
+        ));
+    }
+
+    #[tokio::test]
+    async fn subscription_without_a_head_is_a_timeout() {
+        let (client, _body) = serve("");
+
+        let result = bounded(
+            client
+                .subscribe_events()
+                .timeout(Duration::from_millis(100))
+                .send(),
+        )
+        .await;
+
+        assert!(matches!(
+            result,
+            Err(ApiEndpointCallError::Transport(TransportError::Timeout(limit)))
+                if limit == Duration::from_millis(100)
+        ));
+    }
+
+    #[tokio::test]
+    async fn subscription_outlives_the_timeout() {
+        let (client, body) = serve("HTTP/1.1 200 OK\r\ntransfer-encoding: chunked\r\n\r\n");
+
+        let mut subscription = client
+            .subscribe_events()
+            .timeout(Duration::from_millis(100))
+            .send()
+            .await
+            .unwrap();
+
+        tokio::time::sleep(Duration::from_millis(200)).await;
+
+        let start = line("start");
+
+        body.send(format!("{:x}\r\n{}\r\n", start.len(), start))
+            .unwrap();
+
+        assert_eq!(
+            &*container_action(Some(subscription.next().await.unwrap())),
+            "start"
+        );
     }
 
     #[tokio::test]
@@ -870,7 +1023,8 @@ mod tests {
             "HTTP/1.1 500 Internal Server Error\r\ncontent-length: 18\r\n\r\n{\"message\":\"boom\"}",
         );
 
-        let Err(ApiEndpointCallError::Daemon { status, message }) = client.subscribe_events().await
+        let Err(ApiEndpointCallError::Daemon { status, message }) =
+            client.subscribe_events().send().await
         else {
             panic!("not the daemon's error");
         };
@@ -885,7 +1039,8 @@ mod tests {
             "HTTP/1.1 500 Internal Server Error\r\ncontent-length: 16\r\n\r\n{\"error\":\"boom\"}",
         );
 
-        let Err(ApiEndpointCallError::HttpError { status, body }) = client.subscribe_events().await
+        let Err(ApiEndpointCallError::HttpError { status, body }) =
+            client.subscribe_events().send().await
         else {
             panic!("not an HTTP error");
         };
