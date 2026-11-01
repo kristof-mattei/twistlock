@@ -243,25 +243,25 @@ impl Client {
     /// * Failure to send the request
     /// * The endpoint does not handle the status
     /// * Failed to deserialize the response
-    pub(crate) async fn call<E: ApiEndpoint>(
+    pub(crate) async fn call<Api: ApiEndpoint>(
         &self,
-        request: &E::Request<'_>,
-    ) -> Result<E::Response, ApiEndpointCallError> {
-        let path_and_query = E::path_and_query(request).map_err(ApiEndpointCallError::Query)?;
+        request: &Api::Request<'_>,
+    ) -> Result<Api::Response, ApiEndpointCallError> {
+        let path_and_query = Api::path_and_query(request).map_err(ApiEndpointCallError::Query)?;
 
         let exchange = async {
-            let response = self.send_request(&path_and_query, E::METHOD).await?;
+            let response = self.send_request(&path_and_query, Api::METHOD).await?;
 
             let status = response.status();
 
             Ok((status, read_body(response).await?))
         };
 
-        let limit = self.response_timeout.filter(|_| E::HAS_RESPONSE_TIMEOUT);
+        let limit = self.response_timeout.filter(|_| Api::HAS_RESPONSE_TIMEOUT);
 
         let (status, bytes) = within(limit, exchange).await?;
 
-        E::parse_response(status, &bytes).map_err(|error| match error {
+        Api::parse_response(status, &bytes).map_err(|error| match error {
             ParseError::Status => status_error(status, &bytes),
             ParseError::Body(error) => {
                 event!(Level::ERROR, ?error, message = %String::from_utf8_lossy(&bytes), "Failed to deserialize response");
