@@ -1,9 +1,7 @@
-use std::fmt;
 use std::net::{Ipv4Addr, Ipv6Addr};
 use std::time::Duration;
 
 use hashbrown::HashMap;
-use serde::de::{SeqAccess, Visitor};
 use serde::{Deserialize, Deserializer};
 
 use crate::filters::Status;
@@ -14,38 +12,19 @@ fn deserialize_names<'de, D>(deserializer: D) -> Result<Box<[Box<str>]>, D::Erro
 where
     D: Deserializer<'de>,
 {
-    struct SeqVisitor();
+    let names = Vec::<String>::deserialize(deserializer)?;
 
-    impl<'de> Visitor<'de> for SeqVisitor {
-        type Value = Box<[Box<str>]>;
-
-        fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-            formatter.write_str("a nonempty sequence of items")
-        }
-
-        fn visit_seq<M>(self, mut seq: M) -> Result<Self::Value, M::Error>
-        where
-            M: SeqAccess<'de>,
-        {
-            let mut buffer = seq.size_hint().map_or_else(Vec::new, Vec::with_capacity);
-
-            while let Some(mut value) = seq.next_element::<String>()? {
-                // Docker container name starts with a '/'. I don't know why. But it's useless.
-                if value.starts_with('/') {
-                    let split = value.split_off(1);
-
-                    buffer.push(split.into_boxed_str());
-                } else {
-                    buffer.push(value.into_boxed_str());
-                }
+    Ok(names
+        .into_iter()
+        .map(|mut name| {
+            // Docker container name starts with a '/'. Must be some legacy thing.
+            if name.starts_with('/') {
+                name.remove(0);
             }
 
-            Ok(buffer.into())
-        }
-    }
-
-    let visitor = SeqVisitor();
-    deserializer.deserialize_seq(visitor)
+            name.into_boxed_str()
+        })
+        .collect())
 }
 
 #[derive(Deserialize, Debug)]
