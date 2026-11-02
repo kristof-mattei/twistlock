@@ -178,10 +178,21 @@ mod tests {
             .unwrap()
             .with_tls(tls());
 
-        assert!(
-            matches!(endpoint.host, Host::Explicit(Transport::Unix(_))),
-            "a socket has no TLS"
-        );
+        assert!(matches!(endpoint.host, Host::Explicit(Transport::Unix(_))));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn pipe_ignores_tls() {
+        let endpoint = "npipe:////./pipe/docker_engine"
+            .parse::<Endpoint>()
+            .unwrap()
+            .with_tls(tls());
+
+        assert!(matches!(
+            endpoint.host,
+            Host::Explicit(Transport::NamedPipe(_))
+        ));
     }
 
     #[test]
