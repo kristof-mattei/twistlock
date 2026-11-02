@@ -1,4 +1,16 @@
 <!-- header goes here -->
+## [0.12.1](https://github.com/kristof-mattei/twistlock/compare/v0.12.0..v0.12.1) - 2026-11-02
+
+### 🐛 Bug Fixes
+
+- *(client)* Retry a request on a busy Windows named pipe by [@kristof-mattei](https://github.com/kristof-mattei) ([`e7b195d`](https://github.com/kristof-mattei/twistlock/commit/e7b195d2ba81f32acb4d6c97e5a584d4edc8c3fa))
+
+### 🧪 Testing
+
+- Send a request over a named pipe by [@kristof-mattei](https://github.com/kristof-mattei) ([`3a9e962`](https://github.com/kristof-mattei/twistlock/commit/3a9e962bdd0974d291ea8827ed6a460415b10b3c))
+- Run the client against a real Docker daemon by [@kristof-mattei](https://github.com/kristof-mattei) ([`083e742`](https://github.com/kristof-mattei/twistlock/commit/083e742dac184f6e1adcf13173d30f3577bcfa96))
+- Stop asserting dockerd's error message and restart result by [@kristof-mattei](https://github.com/kristof-mattei) ([`1b8b668`](https://github.com/kristof-mattei/twistlock/commit/1b8b668db6deb982fdf557723c424860cb88be09))
+- Run the real daemon tests on Windows by [@kristof-mattei](https://github.com/kristof-mattei) ([`5ed5bda`](https://github.com/kristof-mattei/twistlock/commit/5ed5bda2797c56c2e596952b9a90d6211aa7e2dd))
 ## [0.12.0](https://github.com/kristof-mattei/twistlock/compare/v0.11.0..v0.12.0) - 2026-11-01
 
 ### ⚠️ Breaking Changes
