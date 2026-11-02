@@ -411,6 +411,19 @@ async fn stop_with_not_modified_is_already_stopped() {
 }
 
 #[tokio::test]
+async fn restart_with_no_content_is_restarted() {
+    let (client, _body) = serve("HTTP/1.1 204 No Content\r\n\r\n");
+
+    client
+        .restart_container(
+            ContainerRef::try_from("ubuntu").unwrap(),
+            StopTimeout::Default,
+        )
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
 async fn restart_with_not_modified_is_an_error() {
     let (client, _body) = serve("HTTP/1.1 304 Not Modified\r\n\r\n");
 
@@ -438,6 +451,24 @@ async fn stop_with_not_found_is_the_daemon_error() {
             ContainerRef::try_from("ubuntu").unwrap(),
             StopTimeout::Default,
         )
+        .await
+    else {
+        panic!("not the daemon's error");
+    };
+
+    assert_eq!(status, 404);
+    assert_eq!(message, "No such container: ubuntu");
+}
+
+#[tokio::test]
+async fn inspect_with_not_found_is_the_daemon_error() {
+    let (client, _body) = serve(
+        "HTTP/1.1 404 Not Found\r\ncontent-length: 39\r\n\r\n{\"message\":\"No such container: ubuntu\"}",
+    );
+
+    let Err(ApiEndpointCallError::Daemon { status, message }) = client
+        .inspect_container(ContainerRef::try_from("ubuntu").unwrap())
+        .send()
         .await
     else {
         panic!("not the daemon's error");
