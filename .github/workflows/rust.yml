@@ -471,6 +471,27 @@ jobs:
         with:
           tool: cargo-nextest
 
+      - name: Start the Docker service
+        shell: pwsh
+        run: |
+          Start-Service docker
+
+          $deadline = (Get-Date).AddMinutes(1)
+
+          while ($true) {
+            docker version *> $null
+
+            if ($LASTEXITCODE -eq 0) {
+              break
+            }
+
+            if ((Get-Date) -ge $deadline) {
+              throw "The Docker daemon did not respond within 1 minute."
+            }
+
+            Start-Sleep -Seconds 1
+          }
+
       - name: Pull the fixture image
         shell: pwsh
         run: |
