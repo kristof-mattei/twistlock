@@ -1,7 +1,6 @@
 use std::fmt::Display;
 
 use hashbrown::{HashMap, HashSet};
-use serde::ser::SerializeSeq as _;
 use serde::{Deserialize, Serialize, Serializer};
 
 #[expect(clippy::ref_option, reason = "Serde API")]
@@ -10,14 +9,7 @@ where
     S: Serializer,
     T: Display,
 {
-    match *v {
-        Some(ref value) => {
-            let mut seq = serializer.serialize_seq(Some(1))?;
-            seq.serialize_element(&value.to_string())?;
-            seq.end()
-        },
-        None => serializer.serialize_none(),
-    }
+    serializer.collect_seq(v.iter().map(ToString::to_string))
 }
 
 #[expect(clippy::ref_option, reason = "Serde API")]
@@ -27,22 +19,7 @@ where
     for<'a> &'a T: IntoIterator<Item = &'a U>,
     U: Display,
 {
-    match *value {
-        Some(ref iter) => {
-            let iter = iter.into_iter();
-
-            let (_lower, upper) = iter.size_hint();
-
-            let mut seq = serializer.serialize_seq(upper)?;
-
-            for next in iter {
-                seq.serialize_element(&next.to_string())?;
-            }
-
-            seq.end()
-        },
-        None => serializer.serialize_none(),
-    }
+    serializer.collect_seq(value.iter().flatten().map(ToString::to_string))
 }
 
 #[expect(clippy::ref_option, reason = "Serde API")]
@@ -55,26 +32,10 @@ where
     T: Display,
     U: Display,
 {
-    match *value {
-        Some(ref iter) => {
-            let iter = iter.into_iter();
-
-            let (_lower, upper) = iter.size_hint();
-
-            let mut seq = serializer.serialize_seq(upper)?;
-
-            for (key, value) in iter {
-                if let Some(ref value) = *value {
-                    seq.serialize_element(&format!("{}={}", key, value))?;
-                } else {
-                    seq.serialize_element(&key.to_string())?;
-                }
-            }
-
-            seq.end()
-        },
-        None => serializer.serialize_none(),
-    }
+    serializer.collect_seq(value.iter().flatten().map(|(key, value)| match *value {
+        Some(ref value) => format!("{}={}", key, value),
+        None => key.to_string(),
+    }))
 }
 
 #[derive(Deserialize, Eq, PartialEq, Hash, Debug)]
