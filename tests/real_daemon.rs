@@ -4,10 +4,14 @@ use std::str::FromStr as _;
 use std::time::Duration;
 
 use hashbrown::HashMap;
+#[cfg(windows)]
+use hashbrown::HashSet;
 use pretty_assertions::assert_eq;
 use twistlock::client::Client;
 use twistlock::config::Endpoint;
 use twistlock::endpoint::ApiEndpointCallError;
+#[cfg(windows)]
+use twistlock::filters::Isolation;
 use twistlock::filters::{Filters, Status};
 use twistlock::models::container::{StopOutcome, StopTimeout};
 use twistlock::models::events::Event;
@@ -28,6 +32,42 @@ fn docker(args: &[&str]) -> String {
     String::from_utf8(output.stdout).unwrap().trim().to_owned()
 }
 
+enum DaemonOs {
+    Linux,
+    Windows,
+}
+
+impl DaemonOs {
+    fn detect() -> DaemonOs {
+        match &*docker(&["version", "--format", "{{.Server.Os}}"]) {
+            "linux" => DaemonOs::Linux,
+            "windows" => DaemonOs::Windows,
+            other => panic!("unknown daemon OS: {}", other),
+        }
+    }
+
+    fn idle_container(&self) -> &'static [&'static str] {
+        match *self {
+            DaemonOs::Linux => &["ubuntu", "sleep", "infinity"],
+            DaemonOs::Windows => &[
+                "--isolation",
+                "process",
+                "mcr.microsoft.com/windows/nanoserver:ltsc2025",
+                "ping",
+                "-t",
+                "localhost",
+            ],
+        }
+    }
+
+    fn default_network(&self) -> &'static str {
+        match *self {
+            DaemonOs::Linux => "bridge",
+            DaemonOs::Windows => "nat",
+        }
+    }
+}
+
 struct Fixture {
     id: ContainerId,
     name: String,
@@ -38,9 +78,10 @@ impl Fixture {
         let name = format!("twistlock-{}-{}", test, std::process::id());
         let label = format!("{}={}", LABEL, name);
 
-        let id = docker(&[
-            "run", "--detach", "--name", &name, "--label", &label, "ubuntu", "sleep", "infinity",
-        ]);
+        let mut args = vec!["run", "--detach", "--name", &name, "--label", &label];
+        args.extend_from_slice(DaemonOs::detect().idle_container());
+
+        let id = docker(&args);
 
         Fixture {
             id: ContainerId::new(id),
@@ -62,9 +103,14 @@ impl Drop for Fixture {
     }
 }
 
-/// Connects to `DOCKER_HOST`, or to the platform default if it is unset, like the `docker` CLI.
+/// Builds a client for the current `docker` context, whose daemon runs the fixtures.
 fn client() -> Client {
-    let host = std::env::var("DOCKER_HOST").unwrap_or_default();
+    let host = docker(&[
+        "context",
+        "inspect",
+        "--format",
+        "{{.Endpoints.docker.Host}}",
+    ]);
 
     Client::build(Endpoint::from_str(&host).unwrap()).unwrap()
 }
@@ -196,13 +242,15 @@ async fn restart_is_observed_by_the_subscription() {
 #[tokio::test]
 #[ignore = "needs a Docker daemon"]
 async fn inspect_network_returns_the_default_network() {
+    let name = DaemonOs::detect().default_network();
+
     let network = client()
-        .inspect_network(NetworkRef::try_from("bridge").unwrap())
+        .inspect_network(NetworkRef::try_from(name).unwrap())
         .send()
         .await
         .unwrap();
 
-    assert_eq!(&*network.name, "bridge");
+    assert_eq!(&*network.name, name);
     assert!(
         network
             .ipam
@@ -218,7 +266,7 @@ async fn list_networks_includes_the_default_network() {
     let client = client();
 
     let network = client
-        .inspect_network(NetworkRef::try_from("bridge").unwrap())
+        .inspect_network(NetworkRef::try_from(DaemonOs::detect().default_network()).unwrap())
         .send()
         .await
         .unwrap();
@@ -226,4 +274,25 @@ async fn list_networks_includes_the_default_network() {
     let networks = client.list_networks().send().await.unwrap();
 
     assert!(networks.iter().any(|summary| summary.id == network.id));
+}
+
+#[cfg(windows)]
+#[tokio::test]
+#[ignore = "needs a Docker daemon"]
+async fn isolation_filter_matches_the_fixture() {
+    let fixture = Fixture::run("isolation");
+
+    let filters = Filters {
+        isolation: Some(HashSet::from([Isolation::Process])),
+        label: Some(HashMap::from([(
+            LABEL.into(),
+            Some(fixture.name.as_str().into()),
+        )])),
+        ..Filters::default()
+    };
+
+    let containers = client().list_containers(&filters).send().await.unwrap();
+
+    assert_eq!(containers.len(), 1);
+    assert_eq!(containers[0].id, fixture.id);
 }
