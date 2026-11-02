@@ -11,6 +11,7 @@ ctarget
 deque
 docsrs
 dorny
+dtask
 dtrue
 endfor
 endmacro

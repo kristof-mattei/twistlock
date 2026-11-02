@@ -155,6 +155,19 @@ mod tests {
     }
 
     #[test]
+    fn list_containers_path_with_is_task_has_the_dashed_key() {
+        let tasks = Filters {
+            is_task: Some(true),
+            ..Filters::default()
+        };
+
+        assert_eq!(
+            ListContainers::path_and_query(&tasks).unwrap(),
+            "/containers/json?all=false&filters=%7B%22is%2Dtask%22%3A%5B%22true%22%5D%7D"
+        );
+    }
+
+    #[test]
     fn inspect_container_path_from_id() {
         let id = ContainerId::new("0f9fc026ac74");
 
