@@ -23,6 +23,7 @@ hyperv
 idents
 keepalive
 kristof
+lastexitcode
 lintian
 ltsc
 mattei
