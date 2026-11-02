@@ -304,10 +304,33 @@ pub struct Filters {
 
 #[cfg(test)]
 mod tests {
-    use hashbrown::HashMap;
+    use hashbrown::{HashMap, HashSet};
     use pretty_assertions::assert_eq;
+    use serde_json::json;
+    use serde_json::value::Serializer;
 
-    use crate::filters::{Filters, Health, Isolation, Status};
+    use crate::filters::{
+        Filters, Health, Isolation, Status, multiple_to_string_array, serialize_labels,
+        single_to_string_array,
+    };
+
+    #[test]
+    fn none_serializes_as_an_empty_array() {
+        assert_eq!(
+            single_to_string_array(&None::<bool>, Serializer).unwrap(),
+            json!([])
+        );
+
+        assert_eq!(
+            multiple_to_string_array::<_, HashSet<Status>, Status>(&None, Serializer).unwrap(),
+            json!([])
+        );
+
+        assert_eq!(
+            serialize_labels::<_, Box<str>, Box<str>>(&None, Serializer).unwrap(),
+            json!([])
+        );
+    }
 
     #[test]
     fn statuses_are_lowercase() {
