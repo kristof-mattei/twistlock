@@ -560,6 +560,7 @@ mod tests {
     use std::task::{Context, Poll};
 
     use bytes::Bytes;
+    use http::HeaderMap;
     use http_body::{Body, Frame};
     use http_body_util::Empty;
     use pretty_assertions::assert_eq;
@@ -587,6 +588,7 @@ mod tests {
 
     enum Step {
         Data(Bytes),
+        Trailers,
         Pending,
     }
 
@@ -602,6 +604,7 @@ mod tests {
         ) -> Poll<Option<Result<Frame<Bytes>, Infallible>>> {
             match self.0.pop_front() {
                 Some(Step::Data(data)) => Poll::Ready(Some(Ok(Frame::data(data)))),
+                Some(Step::Trailers) => Poll::Ready(Some(Ok(Frame::trailers(HeaderMap::new())))),
                 Some(Step::Pending) => {
                     cx.waker().wake_by_ref();
 
@@ -714,6 +717,16 @@ mod tests {
         }
 
         assert_eq!(&*container_action(lines.next().await.unwrap()), "start");
+    }
+
+    #[tokio::test]
+    async fn trailers_after_the_last_event_are_skipped() {
+        let start = line("start");
+        let mut lines = frames([data(&start), Step::Trailers]);
+
+        assert_eq!(&*container_action(lines.next().await.unwrap()), "start");
+
+        assert!(matches!(lines.next().await, Ok(None)));
     }
 
     fn write(directory: &Path, name: &str, contents: &str) -> PathBuf {

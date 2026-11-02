@@ -339,3 +339,62 @@ pub struct Filters {
     // isolation=(default|process|hyperv) (Windows daemon only)
     pub isolation: Option<HashSet<Isolation>>,
 }
+
+#[cfg(test)]
+mod tests {
+    use hashbrown::HashMap;
+    use pretty_assertions::assert_eq;
+
+    use crate::filters::{Filters, Health, Isolation, Status};
+
+    #[test]
+    fn statuses_are_lowercase() {
+        for (status, expected) in [
+            (Status::Created, "created"),
+            (Status::Restarting, "restarting"),
+            (Status::Running, "running"),
+            (Status::Removing, "removing"),
+            (Status::Paused, "paused"),
+            (Status::Exited, "exited"),
+            (Status::Dead, "dead"),
+        ] {
+            assert_eq!(status.to_string(), expected);
+        }
+    }
+
+    #[test]
+    fn health_values_are_lowercase() {
+        for (health, expected) in [
+            (Health::Starting, "starting"),
+            (Health::Healthy, "healthy"),
+            (Health::Unhealthy, "unhealthy"),
+            (Health::None, "none"),
+        ] {
+            assert_eq!(health.to_string(), expected);
+        }
+    }
+
+    #[test]
+    fn isolation_values_are_lowercase() {
+        for (isolation, expected) in [
+            (Isolation::Default, "default"),
+            (Isolation::Process, "process"),
+            (Isolation::HyperV, "hyperv"),
+        ] {
+            assert_eq!(isolation.to_string(), expected);
+        }
+    }
+
+    #[test]
+    fn valueless_label_is_the_key() {
+        let filters = Filters {
+            label: Some(HashMap::from_iter([(Box::from("traefik.enable"), None)])),
+            ..Filters::default()
+        };
+
+        assert_eq!(
+            serde_json::to_string(&filters).unwrap(),
+            r#"{"label":["traefik.enable"]}"#
+        );
+    }
+}

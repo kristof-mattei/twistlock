@@ -200,6 +200,19 @@ mod tests {
     }
 
     #[test]
+    fn empty_host_without_tls_is_the_default_socket() {
+        #[cfg(unix)]
+        let expected = "unix:///var/run/docker.sock";
+        #[cfg(windows)]
+        let expected = "npipe:////./pipe/docker_engine";
+
+        assert_eq!(
+            "".parse::<Endpoint>().unwrap().into_transport().to_string(),
+            expected
+        );
+    }
+
+    #[test]
     fn bare_tcp_host_with_tls_is_localhost_2375() {
         let endpoint = "tcp://".parse::<Endpoint>().unwrap().with_tls(tls());
 
