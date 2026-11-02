@@ -557,6 +557,7 @@ mod tests {
     use std::path::{Path, PathBuf};
     use std::pin::Pin;
     use std::str::FromStr as _;
+    use std::sync::{Arc, Mutex};
     use std::task::{Context, Poll};
 
     use bytes::Bytes;
@@ -567,6 +568,10 @@ mod tests {
     use rcgen::{CertificateParams, KeyPair};
     use reqwest::ClientBuilder;
     use tempfile::TempDir;
+    use tracing::field::{Field, Visit};
+    use tracing::span::{Attributes, Id, Record};
+    use tracing::subscriber::set_default;
+    use tracing::{Metadata, Subscriber};
 
     use crate::client::{BuildError, Client, EventLines, with_tls};
     use crate::config::{ClientCredentialPaths, Endpoint, Tls};
@@ -692,6 +697,54 @@ mod tests {
         assert_eq!(&*container_action(lines.next().await.unwrap()), "start");
 
         assert!(matches!(lines.next().await, Ok(None)));
+    }
+
+    struct Leftovers(Arc<Mutex<Vec<String>>>);
+
+    impl Subscriber for Leftovers {
+        fn enabled(&self, _metadata: &Metadata<'_>) -> bool {
+            true
+        }
+
+        fn new_span(&self, _span: &Attributes<'_>) -> Id {
+            Id::from_u64(1)
+        }
+
+        fn record(&self, _span: &Id, _values: &Record<'_>) {}
+
+        fn record_follows_from(&self, _span: &Id, _follows: &Id) {}
+
+        fn event(&self, event: &tracing::Event<'_>) {
+            event.record(&mut LeftoverField(&self.0));
+        }
+
+        fn enter(&self, _span: &Id) {}
+
+        fn exit(&self, _span: &Id) {}
+    }
+
+    struct LeftoverField<'l>(&'l Mutex<Vec<String>>);
+
+    impl Visit for LeftoverField<'_> {
+        fn record_debug(&mut self, field: &Field, value: &dyn std::fmt::Debug) {
+            if field.name() == "leftover" {
+                self.0.lock().unwrap().push(format!("{:?}", value));
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn partial_line_is_traced_as_leftover() {
+        let leftovers = Arc::new(Mutex::new(Vec::new()));
+        let _subscriber = set_default(Leftovers(Arc::clone(&leftovers)));
+
+        let start = line("start");
+        let (head, tail) = start.split_at(40);
+        let mut lines = frames([data(head), data(tail)]);
+
+        assert_eq!(&*container_action(lines.next().await.unwrap()), "start");
+
+        assert_eq!(*leftovers.lock().unwrap(), [format!("{:?}", head)]);
     }
 
     #[tokio::test]
