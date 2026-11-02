@@ -175,6 +175,20 @@ mod tests {
     }
 
     #[test]
+    fn container_id_displays_the_full_id() {
+        let id = "0f9fc026ac7481ed0d6fc51f34cf7db5d821a3942cf719cbeef5925f853ab8e8";
+
+        assert_eq!(ContainerId::new(id).to_string(), id);
+    }
+
+    #[test]
+    fn network_id_displays_the_full_id() {
+        let id = "d5b1d5d1e4b74ff1b8c3e2b2b0d7a8d9e0f1a2b3c4d5e6f708192a3b4c5d6e7f";
+
+        assert_eq!(NetworkId::new(id).to_string(), id);
+    }
+
+    #[test]
     fn container_ref_accepts_a_full_id() {
         let id = "0f9fc026ac7481ed0d6fc51f34cf7db5d821a3942cf719cbeef5925f853ab8e8";
 
