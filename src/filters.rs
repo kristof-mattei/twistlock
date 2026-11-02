@@ -167,6 +167,7 @@ impl Display for Isolation {
 #[derive(Serialize, Default)]
 pub struct Filters {
     #[serde(
+        rename = "is-task",
         serialize_with = "single_to_string_array",
         skip_serializing_if = "Option::is_none"
     )]
