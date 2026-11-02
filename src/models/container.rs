@@ -390,4 +390,40 @@ mod tests {
             "invalid type: string \"I am not a map, but a string\", expected a map at line 1 column 148"
         );
     }
+
+    fn summary(names: &str) -> ContainerSummary {
+        serde_json::from_str(&format!(
+            r#"{{"Id":"582036c7a5e8719bbbc9476e4216bfaf4fd318b61723f41f2e8fe3b60d8182ae","Names":{},"Labels":{{}},"State":"running","NetworkSettings":{{"Networks":{{}}}}}}"#,
+            names
+        ))
+        .unwrap()
+    }
+
+    #[test]
+    fn get_short_id_is_the_first_twelve_characters() {
+        assert_eq!(summary(r#"["/ubuntu"]"#).get_short_id(), "582036c7a5e8");
+    }
+
+    #[test]
+    fn get_name_is_the_first_name() {
+        assert_eq!(
+            summary(r#"["/ubuntu-1","/ubuntu-2"]"#).get_name(),
+            Some("ubuntu-1")
+        );
+    }
+
+    #[test]
+    fn get_name_without_names_is_none() {
+        assert_eq!(summary("[]").get_name(), None);
+    }
+
+    #[test]
+    fn get_names_is_every_name() {
+        let summary = summary(r#"["/ubuntu-1","/ubuntu-2"]"#);
+
+        assert_eq!(
+            summary.get_names(),
+            [Box::<str>::from("ubuntu-1"), Box::from("ubuntu-2")]
+        );
+    }
 }
