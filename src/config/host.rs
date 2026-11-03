@@ -195,6 +195,7 @@ mod tests {
     fn tcp_hosts_are_completed() {
         for (value, expected) in [
             ("tcp://", "tcp://localhost:2375"),
+            ("tcp:///path", "tcp://localhost:2375/path"),
             ("tcp://host:", "tcp://host:2375"),
             ("tcp://:2375", "tcp://localhost:2375"),
             ("tcp://:2376", "tcp://localhost:2376"),
