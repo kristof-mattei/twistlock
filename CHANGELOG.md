@@ -1,4 +1,32 @@
 <!-- header goes here -->
+## [0.12.2](https://github.com/kristof-mattei/twistlock/compare/v0.12.1..v0.12.2) - 2026-11-03
+
+### 🐛 Bug Fixes
+
+- *(filters)* Send `is_task` as the `is-task` filter by [@kristof-mattei](https://github.com/kristof-mattei) ([`deca1cf`](https://github.com/kristof-mattei/twistlock/commit/deca1cf6b7bab205febefafdcb8932098bad35ce))
+
+### 🚜 Refactor
+
+- *(filters)* Serialize filter values with `collect_seq` by [@kristof-mattei](https://github.com/kristof-mattei) ([`c9a4c77`](https://github.com/kristof-mattei/twistlock/commit/c9a4c772d7c94b09eb7a8b14aeec5c5a33b9b7fb))
+- *(models)* Deserialize container names without a hand-written visitor by [@kristof-mattei](https://github.com/kristof-mattei) ([`c907e35`](https://github.com/kristof-mattei/twistlock/commit/c907e358f4fbd32a404b44a1afdc9ab50bb1c7ab))
+
+### 🧪 Testing
+
+- *(client)* Cover the `Buffer leftover` trace event by [@kristof-mattei](https://github.com/kristof-mattei) ([`1926c95`](https://github.com/kristof-mattei/twistlock/commit/1926c9540f8e13a3e237c51512898564ed3569bf))
+- *(client)* Reach a remote daemon through the environment proxy by [@kristof-mattei](https://github.com/kristof-mattei) ([`00f1339`](https://github.com/kristof-mattei/twistlock/commit/00f1339ec6832e8f625d66520654536cdc68af4d))
+- *(config)* Cover `with_tls` on a named pipe by [@kristof-mattei](https://github.com/kristof-mattei) ([`670ae22`](https://github.com/kristof-mattei/twistlock/commit/670ae22f829d03fc6860e66c4ddce1f8a82e4d23))
+- *(config)* Cover a TCP address without a host by [@kristof-mattei](https://github.com/kristof-mattei) ([`d14471d`](https://github.com/kristof-mattei/twistlock/commit/d14471da121e59a07f04aa30531e603f2f5290a3))
+- *(filters)* Pin `None` serializing as an empty array by [@kristof-mattei](https://github.com/kristof-mattei) ([`3499cda`](https://github.com/kristof-mattei/twistlock/commit/3499cdaca6342c83882ba04bed9c85ccf44fd7f0))
+- *(models)* Cover the `ContainerSummary` accessors by [@kristof-mattei](https://github.com/kristof-mattei) ([`48525d4`](https://github.com/kristof-mattei/twistlock/commit/48525d4637ce065efb82c33950890d7588bef605))
+- *(models)* Cover `Display` for `ContainerId` and `NetworkId` by [@kristof-mattei](https://github.com/kristof-mattei) ([`4ff4b64`](https://github.com/kristof-mattei/twistlock/commit/4ff4b64ea915aad200a3df42d8e4df51d1fa8acc))
+- Cover the filter wire strings, a successful restart, an inspect error, trailers and the default socket by [@kristof-mattei](https://github.com/kristof-mattei) ([`36eb198`](https://github.com/kristof-mattei/twistlock/commit/36eb19808215d9665193af84d4af453ec571323c))
+
+### ⚙️ Miscellaneous Tasks
+
+- Start the Docker service before the Windows real daemon tests by [@kristof-mattei](https://github.com/kristof-mattei) ([`399866e`](https://github.com/kristof-mattei/twistlock/commit/399866efa73010ee59ddf4e338a1512ecb046298))
+- Report container layer sizes to Codecov bundle analysis by [@kristof-mattei](https://github.com/kristof-mattei) ([`dd9a929`](https://github.com/kristof-mattei/twistlock/commit/dd9a929b110c40a34242f2e12b6c54ae49fd9782))
+- Make `report-container-size.js` pass oxlint by [@kristof-mattei](https://github.com/kristof-mattei) ([`f704727`](https://github.com/kristof-mattei/twistlock/commit/f704727f63c6ac16ed7cff7dfa8ba91af1440549))
+- Drop duplicate fork checks from `docker-attest` and rewrite job condition comments by [@kristof-mattei](https://github.com/kristof-mattei) ([`8e57c97`](https://github.com/kristof-mattei/twistlock/commit/8e57c97652f7409476f84c885c6ab52b074d064e))
 ## [0.12.1](https://github.com/kristof-mattei/twistlock/compare/v0.12.0..v0.12.1) - 2026-11-02
 
 ### 🐛 Bug Fixes
