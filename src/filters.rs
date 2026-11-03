@@ -1,7 +1,6 @@
 use std::fmt::Display;
 
 use hashbrown::{HashMap, HashSet};
-use serde::ser::SerializeSeq as _;
 use serde::{Deserialize, Serialize, Serializer};
 
 #[expect(clippy::ref_option, reason = "Serde API")]
@@ -10,14 +9,7 @@ where
     S: Serializer,
     T: Display,
 {
-    match *v {
-        Some(ref value) => {
-            let mut seq = serializer.serialize_seq(Some(1))?;
-            seq.serialize_element(&value.to_string())?;
-            seq.end()
-        },
-        None => serializer.serialize_none(),
-    }
+    serializer.collect_seq(v.iter().map(ToString::to_string))
 }
 
 #[expect(clippy::ref_option, reason = "Serde API")]
@@ -27,22 +19,7 @@ where
     for<'a> &'a T: IntoIterator<Item = &'a U>,
     U: Display,
 {
-    match *value {
-        Some(ref iter) => {
-            let iter = iter.into_iter();
-
-            let (_lower, upper) = iter.size_hint();
-
-            let mut seq = serializer.serialize_seq(upper)?;
-
-            for next in iter {
-                seq.serialize_element(&next.to_string())?;
-            }
-
-            seq.end()
-        },
-        None => serializer.serialize_none(),
-    }
+    serializer.collect_seq(value.iter().flatten().map(ToString::to_string))
 }
 
 #[expect(clippy::ref_option, reason = "Serde API")]
@@ -55,26 +32,10 @@ where
     T: Display,
     U: Display,
 {
-    match *value {
-        Some(ref iter) => {
-            let iter = iter.into_iter();
-
-            let (_lower, upper) = iter.size_hint();
-
-            let mut seq = serializer.serialize_seq(upper)?;
-
-            for (key, value) in iter {
-                if let Some(ref value) = *value {
-                    seq.serialize_element(&format!("{}={}", key, value))?;
-                } else {
-                    seq.serialize_element(&key.to_string())?;
-                }
-            }
-
-            seq.end()
-        },
-        None => serializer.serialize_none(),
-    }
+    serializer.collect_seq(value.iter().flatten().map(|(key, value)| match *value {
+        Some(ref value) => format!("{}={}", key, value),
+        None => key.to_string(),
+    }))
 }
 
 #[derive(Deserialize, Eq, PartialEq, Hash, Debug)]
@@ -343,10 +304,33 @@ pub struct Filters {
 
 #[cfg(test)]
 mod tests {
-    use hashbrown::HashMap;
+    use hashbrown::{HashMap, HashSet};
     use pretty_assertions::assert_eq;
+    use serde_json::json;
+    use serde_json::value::Serializer;
 
-    use crate::filters::{Filters, Health, Isolation, Status};
+    use crate::filters::{
+        Filters, Health, Isolation, Status, multiple_to_string_array, serialize_labels,
+        single_to_string_array,
+    };
+
+    #[test]
+    fn none_serializes_as_an_empty_array() {
+        assert_eq!(
+            single_to_string_array(&None::<bool>, Serializer).unwrap(),
+            json!([])
+        );
+
+        assert_eq!(
+            multiple_to_string_array::<_, HashSet<Status>, Status>(&None, Serializer).unwrap(),
+            json!([])
+        );
+
+        assert_eq!(
+            serialize_labels::<_, Box<str>, Box<str>>(&None, Serializer).unwrap(),
+            json!([])
+        );
+    }
 
     #[test]
     fn statuses_are_lowercase() {
