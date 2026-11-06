@@ -44,6 +44,7 @@ pyflakes
 rawfile
 retag
 retagging
+retags
 rhysd
 rustdocflags
 rustflags
