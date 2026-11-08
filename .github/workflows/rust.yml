@@ -200,7 +200,7 @@ jobs:
           rustup update
 
       - name: Install nextest, custom test runner, with native support for junit and grcov
-        uses: taiki-e/install-action@v2.90.2
+        uses: taiki-e/install-action@v2.90.3
         with:
           tool: cargo-nextest, grcov
 
@@ -312,7 +312,7 @@ jobs:
           rustup update
 
       - name: Install nextest, custom test runner, with native support for junit and grcov
-        uses: taiki-e/install-action@v2.90.2
+        uses: taiki-e/install-action@v2.90.3
         with:
           tool: cargo-nextest, grcov
 
@@ -433,7 +433,7 @@ jobs:
       - *set_up_sccache
 
       - name: Install nextest
-        uses: taiki-e/install-action@v2.90.2
+        uses: taiki-e/install-action@v2.90.3
         with:
           tool: cargo-nextest
 
@@ -463,7 +463,7 @@ jobs:
       - *set_up_sccache
 
       - name: Install nextest
-        uses: taiki-e/install-action@v2.90.2
+        uses: taiki-e/install-action@v2.90.3
         with:
           tool: cargo-nextest
 
@@ -641,7 +641,7 @@ jobs:
           show-progress: false
 
       - name: Install git-cliff to calculate the next version number
-        uses: taiki-e/install-action@v2.90.2
+        uses: taiki-e/install-action@v2.90.3
         with:
           tool: git-cliff
 
@@ -682,7 +682,7 @@ jobs:
       - *set_up_sccache
 
       - name: Install cargo-semver-checks, and cargo-edit to do set-version
-        uses: taiki-e/install-action@v2.90.2
+        uses: taiki-e/install-action@v2.90.3
         with:
           tool: cargo-semver-checks,cargo-edit
 
