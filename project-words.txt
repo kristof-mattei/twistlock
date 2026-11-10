@@ -22,6 +22,7 @@ headgreen
 hyperv
 idents
 keepalive
+kjanat
 kristof
 lastexitcode
 lintian
@@ -47,7 +48,6 @@ rawfile
 retag
 retagging
 retags
-rhysd
 rustdocflags
 rustflags
 samply
