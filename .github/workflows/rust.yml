@@ -350,6 +350,20 @@ jobs:
           cargo nextest run --profile ci --no-fail-fast --all-targets --all-features --workspace
         continue-on-error: true
 
+      - name: Upload test results
+        id: test-results
+        background: true
+        # fork PRs run with a read-only token, which cannot create check runs or PR comments
+        if: |
+          github.event_name != 'pull_request' ||
+          github.event.pull_request.head.repo.full_name == github.repository
+        uses: EnricoMi/publish-unit-test-result-action/windows@v2.26.0
+        with:
+          check_name: Test results Windows
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          files: |
+            reports/results.xml
+
       - name: Record Rust version
         shell: pwsh
         run: |
@@ -358,18 +372,6 @@ jobs:
           Add-Content -Path "$env:GITHUB_ENV" -Value "RUST=$version"
 
       - parallel:
-          - name: Upload test results
-            # fork PRs run with a read-only token, which cannot create check runs or PR comments
-            if: |
-              github.event_name != 'pull_request' ||
-              github.event.pull_request.head.repo.full_name == github.repository
-            uses: EnricoMi/publish-unit-test-result-action/windows@v2.26.0
-            with:
-              check_name: Test results Windows
-              github_token: ${{ secrets.GITHUB_TOKEN }}
-              files: |
-                reports/results.xml
-
           - name: Run grcov
             shell: pwsh
             run: |
@@ -438,6 +440,9 @@ jobs:
               skip-errors: false
               tag: windows
 
+      - name: Wait for the test results upload
+        wait: test-results
+
       - name: Fail if tests failed
         shell: pwsh
         if: |
@@ -482,22 +487,9 @@ jobs:
     name: Cargo test (real daemon) Windows
     runs-on: windows-2025
     steps:
-      - *disable_autocrlf
-
-      - *checkout
-
-      - *set_up_mold
-
-      - *set_up_toolchain_windows
-
-      - *set_up_sccache
-
-      - name: Install nextest
-        uses: taiki-e/install-action@v2.90.3
-        with:
-          tool: cargo-nextest
-
-      - name: Start the Docker service
+      - name: Start the Docker service and pull the fixture image
+        id: docker
+        background: true
         shell: pwsh
         run: |
           Start-Service docker
@@ -518,10 +510,25 @@ jobs:
             Start-Sleep -Seconds 1
           }
 
-      - name: Pull the fixture image
-        shell: pwsh
-        run: |
           docker pull mcr.microsoft.com/windows/nanoserver:ltsc2025
+
+      - *disable_autocrlf
+
+      - *checkout
+
+      - *set_up_mold
+
+      - *set_up_toolchain_windows
+
+      - *set_up_sccache
+
+      - name: Install nextest
+        uses: taiki-e/install-action@v2.90.3
+        with:
+          tool: cargo-nextest
+
+      - name: Wait for the Docker service and the fixture image
+        wait: docker
 
       - name: Run the real daemon tests
         shell: pwsh
